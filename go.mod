@@ -1,4 +1,4 @@
-module github.com/denis-engcom/monday-logging-cli
+module github.com/denis-engcom/mlog
 
 go 1.20
 
