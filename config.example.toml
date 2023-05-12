@@ -1,0 +1,8 @@
+# Copy file as config.toml, fill with info
+# https://magicboard.monday.com/apps/manage/tokens
+api_access_token = "eyJhbGciOi..."
+# https://magicboard.monday.com/users/...
+logging_user_id = "123456789"
+# From query monthly boards...
+person_column_id = "..."
+hours_column_id = "..."
