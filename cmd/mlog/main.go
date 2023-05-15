@@ -39,11 +39,9 @@ func main() {
 		Description: `Monday logging CLI is a tool to help create pulses in a particular fashion on Monday`,
 		// Default output is
 		// mlog [global options] command [command options] [arguments...]
-		UsageText:       `mlog command [arguments...]`,
-		Version:         "0.1.0",
-		HideHelpCommand: true,
-		//ArgsUsage:            "(stdin)",
-		//Action:               mlog,
+		UsageText:            `mlog command [arguments...]`,
+		Version:              "0.1.0",
+		HideHelpCommand:      true,
 		EnableBashCompletion: true,
 		Commands: cli.Commands{
 			{

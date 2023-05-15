@@ -15,6 +15,7 @@ type MondayAPIClient struct {
 	hoursColumnID  string
 }
 
+// NewMondayAPIClient forms the client with common information needed during Monday API calls.
 func NewMondayAPIClient(apiAccessToken, loggingUserID, personColumnID, hoursColumnID string) *MondayAPIClient {
 	client := graphql.NewClient("https://api.monday.com/v2/", nil).
 		WithRequestModifier(func(req *http.Request) {
@@ -45,6 +46,7 @@ type GetBoardsQuery struct {
 	Boards []Board `graphql:"boards(ids: $board_ids)"`
 }
 
+// GetBoard calls the Monday API "boards" query with a single board and returns it.
 func (m *MondayAPIClient) GetBoard(boardID string) (*Board, error) {
 	boardIDInt, err := strconv.Atoi(boardID)
 	if err != nil {
@@ -61,6 +63,7 @@ func (m *MondayAPIClient) GetBoard(boardID string) (*Board, error) {
 	return &gbq.Boards[0], nil
 }
 
+// JSONEncodedString avoids a type mismatch in the GraphQL library when setting a JSON-encoded string property.
 type JSONEncodedString string
 
 func (_ JSONEncodedString) GetGraphQLType() string { return "JSON" }
@@ -71,19 +74,19 @@ type CreateLogItemMutate struct {
 	} `graphql:"create_item (board_id: $board_id, group_id: $group_id, item_name: $item_name, column_values: $column_values)"`
 }
 
+// CreateLogItem calls the Monday api "create_item" mutation.
 func (m *MondayAPIClient) CreateLogItem(boardID, groupID, itemName, hours string) (*CreateLogItemMutate, error) {
 	boardIDInt, err := strconv.Atoi(boardID)
 	if err != nil {
 		return nil, err
 	}
-	// Validating it's a float, but will plug in the string value in the request...
+	// Validating it's a float, but can still make direct use of the string value in the request.
 	_, err = strconv.ParseFloat(hours, 64)
 	if err != nil {
 		return nil, err
 	}
-	// Quote values, except hours to interpret as number
+	// Person and Hours key-value pairs have to be provided together as a JSON-encoded string property.
 	columnValues := fmt.Sprintf(`{"%s":"%s","%s":%s}`, m.personColumnID, m.loggingUserID, m.hoursColumnID, hours)
-	//logger.Info(columnValuesStr)
 
 	vars := map[string]interface{}{
 		"board_id":      boardIDInt,
