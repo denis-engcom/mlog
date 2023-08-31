@@ -6,6 +6,7 @@ require (
 	github.com/hasura/go-graphql-client v0.9.3
 	github.com/knadh/koanf v1.5.0
 	github.com/knadh/koanf/v2 v2.0.1
+	github.com/pkg/errors v0.9.1
 	github.com/urfave/cli/v2 v2.25.3
 	go.uber.org/zap v1.24.0
 )

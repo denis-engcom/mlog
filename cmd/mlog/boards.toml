@@ -1,0 +1,49 @@
+# https://toml.io/en/v1.0.0#keys
+# Idea is to accept a log's date as yyyy-mm-dd and split in two: ["yyyy-mm", "-dd"]
+# 1. Locate the relevant month to query the correct board
+# 2. Locate the correct day to know which group to interact with
+# Also, unlike config.toml, this file would be embedded in the build so that users can update the build to get the latest months config.
+[months.2023-05]
+board_id = 4387022645
+
+[months.2023-06]
+board_id = 4547507308
+
+[months.2023-07]
+board_id = 4721697359
+
+[months.2023-08]
+board_id = 4925671275
+[months.2023-08.days]
+"-01" = "tue_aug_01"  
+"-02" = "wed_aug_02"
+"-03" = "thu_aug_03"
+"-04" = "fri_aug_04"
+"-05" = "sat_aug_05"
+"-06" = "sun_aug_06"
+"-07" = "mon_aug_07"
+"-08" = "tue_aug_08"
+"-09" = "wed_aug_09"
+"-10" = "thu_aug_10"
+"-11" = "fri_aug_11"
+"-12" = "sat_aug_12"
+"-13" = "sun_aug_13"
+"-14" = "mon_aug_14"
+"-15" = "tue_aug_15"
+"-16" = "wed_aug_16"
+"-17" = "thu_aug_17"
+"-18" = "fri_aug_18"
+"-19" = "sat_aug_19"
+"-20" = "sun_aug_20"
+"-21" = "mon_aug_21"
+"-22" = "tue_aug_22"
+"-23" = "wed_aug_23"
+"-24" = "thu_aug_24"
+"-25" = "fri_aug_25"
+"-26" = "sat_aug_26"
+"-27" = "sun_aug_27"
+"-28" = "mon_aug_28"
+"-29" = "tue_aug_29"
+"-30" = "wed_aug_30"
+"-31" = "thu_aug_31"
+

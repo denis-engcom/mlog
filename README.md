@@ -27,13 +27,25 @@ First, produce a config.toml in your working directory
 # Get board information to inform the user on creating logs against this board.
 # Board ID
 # Pipe the output trough a program like `jq` if wanting pretty printed or filtered
-➜ mlog get-board 1234567890
+➜ mlog get-board-by-id 1234567890
 {"ID":"1234567890","Name":"Apr 2023 Completed Work","Columns":[{"ID":"name","Title":"Name"},...],"Groups":[{"ID":"mon_apr_1","Title":"Mon Apr 1"},...]}
+```
 
+Populate `boards.toml` with board information
+```toml
+[months.2023-04]
+board_id = 1234567890
+[months.2023-04.days]
+"-01": "mon_apr_1"
+# ...
+```
+
+```sh
 # Create one log entry with info provided on the command line
-# Board ID, column ID, log title, hours spent
+# Day, log title, hours spent
 # Minimal config.toml must be set up with target user and credentials
-➜ mlog create-one 1234567890 mon_apr_1 "Pursued activities to get things done" 2.5
+# mlog maps "2023-04-01" to board_id 1234567890 and group_id mon_apr_1
+➜ mlog create-one 2023-04-01 "Pursued activities to get things done" 2.5
 https://magicboard.monday.com/boards/1234567890/pulses/3216540987
 ```
 

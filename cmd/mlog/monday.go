@@ -16,7 +16,11 @@ type MondayAPIClient struct {
 }
 
 // NewMondayAPIClient forms the client with common information needed during Monday API calls.
-func NewMondayAPIClient(apiAccessToken, loggingUserID, personColumnID, hoursColumnID string) *MondayAPIClient {
+func NewMondayAPIClient() *MondayAPIClient {
+	apiAccessToken := userConf.MustString("api_access_token")
+	loggingUserID := userConf.MustString("logging_user_id")
+	personColumnID := userConf.MustString("person_column_id")
+	hoursColumnID := userConf.MustString("hours_column_id")
 	client := graphql.NewClient("https://api.monday.com/v2/", nil).
 		WithRequestModifier(func(req *http.Request) {
 			req.Header.Add("Authorization", apiAccessToken)
@@ -46,17 +50,13 @@ type GetBoardsQuery struct {
 	Boards []Board `graphql:"boards(ids: $board_ids)"`
 }
 
-// GetBoard calls the Monday API "boards" query with a single board and returns it.
-func (m *MondayAPIClient) GetBoard(boardID string) (*Board, error) {
-	boardIDInt, err := strconv.Atoi(boardID)
-	if err != nil {
-		return nil, err
-	}
+// GetBoardByID calls the Monday API "boards" query with a single board and returns it.
+func (m *MondayAPIClient) GetBoardByID(boardID int) (*Board, error) {
 	vars := map[string]interface{}{
-		"board_ids": []int{boardIDInt},
+		"board_ids": []int{boardID},
 	}
 	var gbq GetBoardsQuery
-	err = m.client.Query(context.TODO(), &gbq, vars)
+	err := m.client.Query(context.TODO(), &gbq, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -75,13 +75,9 @@ type CreateLogItemMutate struct {
 }
 
 // CreateLogItem calls the Monday api "create_item" mutation.
-func (m *MondayAPIClient) CreateLogItem(boardID, groupID, itemName, hours string) (*CreateLogItemMutate, error) {
-	boardIDInt, err := strconv.Atoi(boardID)
-	if err != nil {
-		return nil, err
-	}
+func (m *MondayAPIClient) CreateLogItem(boardID int, groupID, itemName, hours string) (*CreateLogItemMutate, error) {
 	// Validating it's a float, but can still make direct use of the string value in the request.
-	_, err = strconv.ParseFloat(hours, 64)
+	_, err := strconv.ParseFloat(hours, 64)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +85,7 @@ func (m *MondayAPIClient) CreateLogItem(boardID, groupID, itemName, hours string
 	columnValues := fmt.Sprintf(`{"%s":"%s","%s":%s}`, m.personColumnID, m.loggingUserID, m.hoursColumnID, hours)
 
 	vars := map[string]interface{}{
-		"board_id":      boardIDInt,
+		"board_id":      boardID,
 		"group_id":      groupID,
 		"item_name":     itemName,
 		"column_values": JSONEncodedString(columnValues),
