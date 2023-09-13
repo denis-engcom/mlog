@@ -1,4 +1,8 @@
-# https://toml.io/en/v1.0.0#keys
+# These column IDs are needed to populate the "person" and "hours" field
+# They appear to be stable month-to-month
+person_column_id = "person7"
+hours_column_id = "hours7"
+
 # Idea is to accept a log's date as yyyy-mm-dd and split in two: ["yyyy-mm", "-dd"]
 # 1. Locate the relevant month to query the correct board
 # 2. Locate the correct day to know which group to interact with

@@ -5,8 +5,3 @@ api_access_token = "eyJhbGciOi..."
 # Get your user ID from your profile (bottom-left corner of Monday interface)
 # https://magicboard.monday.com/users/...
 logging_user_id = "123456789"
-
-# Take note of specific column IDs related to boards...
-# Can be discovered by querying board information via `mlog get-board 1234567890`
-person_column_id = "..."
-hours_column_id = "..."

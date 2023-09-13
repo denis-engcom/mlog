@@ -19,8 +19,8 @@ type MondayAPIClient struct {
 func NewMondayAPIClient() *MondayAPIClient {
 	apiAccessToken := userConf.MustString("api_access_token")
 	loggingUserID := userConf.MustString("logging_user_id")
-	personColumnID := userConf.MustString("person_column_id")
-	hoursColumnID := userConf.MustString("hours_column_id")
+	personColumnID := boardsData.MustString("person_column_id")
+	hoursColumnID := boardsData.MustString("hours_column_id")
 	client := graphql.NewClient("https://api.monday.com/v2/", nil).
 		WithRequestModifier(func(req *http.Request) {
 			req.Header.Add("Authorization", apiAccessToken)

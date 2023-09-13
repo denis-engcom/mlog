@@ -4,16 +4,17 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/urfave/cli/v2"
-	"go.uber.org/zap"
 	"log"
 	"os"
 	"strconv"
 
+	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
+	"go.uber.org/zap"
+
+	"github.com/adrg/xdg"
 	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/providers/rawbytes"
 	"github.com/knadh/koanf/v2"
 )
 
@@ -27,8 +28,8 @@ var (
 // 	Months map[string]Month `koanf:"months"`
 // }
 
-//go:embed boards.toml
-var boardsTOML []byte
+// go embed boards.toml
+// var boardsTOML []byte
 
 type Month struct {
 	BoardID uint64            `koanf:"board_id"`
@@ -42,11 +43,29 @@ func main() {
 	defer devLogger.Sync()
 	logger = devLogger.Sugar()
 
-	if err := userConf.Load(file.Provider("config.toml"), toml.Parser()); err != nil {
+	// TODO relocate conf parsing to happen in subcommand
+
+	// TODO prompt for missing properties and record in file
+	//if errors.Is(err, fs.ErrNotExist) {
+	//}
+	configFilePath, err := xdg.ConfigFile("mlog/config.toml")
+	if err != nil {
 		log.Fatalf("error loading config: %+v", err)
 	}
 
-	if err := boardsData.Load(rawbytes.Provider(boardsTOML), toml.Parser()); err != nil {
+	if err := userConf.Load(file.Provider(configFilePath), toml.Parser()); err != nil {
+		log.Fatalf("error loading config: %+v", err)
+	}
+
+	// TODO Update `mlog get-boards` to somehow fetch this conf?
+	// How best to propagate this conf to cli users?
+	// Maybe have ability to download from github? Need convenient CLI login functionality though.
+	boardsDataFilePath, err := xdg.DataFile("mlog/boards.toml")
+	if err != nil {
+		log.Fatalf("error loading config: %+v", err)
+	}
+
+	if err := boardsData.Load(file.Provider(boardsDataFilePath), toml.Parser()); err != nil {
 		log.Fatalf("error loading config: %+v", err)
 	}
 
