@@ -71,6 +71,7 @@ func main() {
 
 	mondayAPIClient := NewMondayAPIClient()
 
+	// TODO config command prints the paths of config/data files
 	app := &cli.App{
 		Name:        "mlog",
 		Usage:       "Processes timelog input and generates aggregated event information.",
@@ -83,6 +84,16 @@ func main() {
 		EnableBashCompletion: true,
 
 		Commands: cli.Commands{
+			{
+				Name:        "configuration",
+				Aliases:     []string{"cfg"},
+				Description: "Print the path of config files on your system",
+				Action: func(cCtx *cli.Context) error {
+					fmt.Printf("User configuration path: %s\n", configFilePath)
+					fmt.Printf("Board data path:         %s\n", boardsDataFilePath)
+					return nil
+				},
+			},
 			{
 				Name:        "month",
 				Aliases:     []string{"m"},
