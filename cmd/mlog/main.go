@@ -74,7 +74,14 @@ func main() {
 				Action: func(cCtx *cli.Context) error {
 					fmt.Printf("User configuration path: %s\n", configFilePath)
 					fmt.Printf("Board data path:         %s\n", boardsDataFilePath)
-					// TODO print boards configuration description
+
+					if err := boardsData.Load(file.Provider(boardsDataFilePath), toml.Parser()); err == nil {
+						description := boardsData.String("description")
+						if description != "" {
+							fmt.Println("- Description: " + description)
+						}
+					}
+
 					return nil
 				},
 			},
@@ -110,9 +117,17 @@ func main() {
 						return err
 					}
 					fmt.Printf("GET %s (%d bytes) - successful\n", boardsURL, n)
-					fmt.Printf("Saved to %s.\n", boardsDataFilePath)
-					// TODO print boards configuration description
-					fmt.Println("Update complete.")
+					fmt.Printf("Saved to %s\n", boardsDataFilePath)
+
+					boardsData = koanf.New(".")
+					if err := boardsData.Load(file.Provider(boardsDataFilePath), toml.Parser()); err == nil {
+						description := boardsData.String("description")
+						if description != "" {
+							fmt.Println("- Description: " + description)
+						}
+					}
+
+					fmt.Println("Update complete without errors")
 
 					return nil
 				},
