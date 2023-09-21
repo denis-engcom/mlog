@@ -6,7 +6,7 @@ import (
 	"github.com/go-errors/errors"
 )
 
-// TODO apply new error handling everywhere
+// TODO Make most output print using cli.ErrWriter (os.Stderr).
 
 // CommandMessager allows us to extract command messages via errors.As for
 // printing on the command line.
@@ -63,5 +63,6 @@ func WrapWithStackF(err error, format string, a ...any) error {
 
 func NewCommandMessage(err error, msg string) error {
 	cm := CommandMessage{error: err, msg: msg, exitCode: 1}
+	// For the stack trace, skip this function AND the function calling this function.
 	return errors.Wrap(cm, 2)
 }

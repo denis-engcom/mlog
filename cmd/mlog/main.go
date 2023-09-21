@@ -43,8 +43,8 @@ func main() {
 	// TODO version command (in addition to -v)
 	app := &cli.App{
 		Name:        "mlog",
-		Usage:       "Processes timelog input and generates aggregated event information.",
-		Description: `Monday logging CLI is a tool to help create pulses in a particular fashion on Monday`,
+		Usage:       "facilitates log pulse creation on Monday",
+		Description: `mlog (Monday logging CLI) is a tool to help create log pulses on Monday.`,
 		// Default output is
 		// mlog [global options] command [command options] [arguments...]
 		UsageText:            `mlog command [arguments...]`,
@@ -57,7 +57,7 @@ func main() {
 		Commands: cli.Commands{
 			{
 				Name:        "setup",
-				Description: "Setup configurations files needed by other mlog commands",
+				Description: "Setup configuration files needed by the other mlog commands",
 				Action:      setup,
 			},
 			{
@@ -68,7 +68,6 @@ func main() {
 			},
 			{
 				Name:        "month",
-				Aliases:     []string{"m"},
 				ArgsUsage:   "<yyyy-mm>",
 				Description: "Print boards.toml information for a given month",
 				Action: func(cCtx *cli.Context) error {
@@ -139,21 +138,21 @@ func main() {
 }
 
 func loadConfPaths() error {
-	// TODO prompt for missing properties and record in file
-	//if errors.Is(err, fs.ErrNotExist) {
-	//}
 	var err error
 	userConfFilePath, err = xdg.ConfigFile("mlog/config.toml")
 	if err != nil {
-		return WrapWithStack(err, "Error: unable to locate user configuration file")
+		return WrapWithStack(err, "Error: unable to locate user configuration file. Please send a bug report to the developer. Exiting.")
 	}
 
 	boardsConfFilePath, err = xdg.DataFile("mlog/boards.toml")
 	if err != nil {
-		return WrapWithStack(err, "Error: unable to locate boards configuration file")
+		return WrapWithStack(err, "Error: unable to locate boards configuration file. Please send a bug report to the developer. Exiting.")
 	}
 	return nil
 }
+
+var unableToParseUserConfMsg = "Unable to parse user configuration file.\nRun `mlog setup` for error details."
+var unableToParseBoardsConfMsg = "Unable to parse boards configuration file.\nRun `mlog setup` for error details."
 
 func loadConf() error {
 	err := loadConfPaths()
@@ -162,16 +161,23 @@ func loadConf() error {
 	}
 
 	if err := userConf.Load(file.Provider(userConfFilePath), toml.Parser()); err != nil {
-		// log.Fatalf("error loading config: %+v", err)
-		// "See config.example.toml on github.com/denis-engcom/mlog for instructions on how to fill a configuration file"
-		return WrapWithStack(err,
-			"Unable to parse user configuration file (missing or incorrectly formatted): "+userConfFilePath)
+		return WrapWithStack(err, unableToParseUserConfMsg)
 	}
+	apiAccessToken := userConf.String("api_access_token")
+	loggingUserID := userConf.String("logging_user_id")
+	if apiAccessToken == "" || loggingUserID == "" {
+		return WrapWithStack(err, unableToParseUserConfMsg)
+	}
+
 	if err := boardsConf.Load(file.Provider(boardsConfFilePath), toml.Parser()); err != nil {
-		// log.Fatalf("error loading config: %+v", err)
-		// "Please run `mlog update` to fetch the latest boards configuration file"
-		return WrapWithStack(err, "Unable to parse boards configuration file (missing or incorrectly formatted): "+boardsConfFilePath)
+		return WrapWithStack(err, unableToParseBoardsConfMsg)
 	}
+	personColumnID := boardsConf.MustString("person_column_id")
+	hoursColumnID := boardsConf.MustString("hours_column_id")
+	if personColumnID == "" || hoursColumnID == "" {
+		return WrapWithStack(err, unableToParseBoardsConfMsg)
+	}
+
 	return nil
 }
 
@@ -244,6 +250,7 @@ func setup(cCtx *cli.Context) error {
 	return nil
 }
 
+// TODO Detect when you are already up to date.
 func update(cCtx *cli.Context) error {
 	err := loadConfPaths()
 	if err != nil {
@@ -297,11 +304,10 @@ func checkMonth(monthYYYYMM string) error {
 	var monthConf Month
 	err := boardsConf.Unmarshal(monthKey, &monthConf)
 	if err != nil {
-		return WrapWithStack(err, "Unable to parse boards configuration file: "+boardsConfFilePath)
+		return WrapWithStack(err, unableToParseUserConfMsg)
 	}
 	if monthConf.BoardID == 0 {
-		msg := fmt.Sprintf("boards.toml: month not found: %q", monthYYYYMM)
-		return WithStack(msg)
+		return WithStackF("%q: month not found in boards configuration. Exiting.", monthYYYYMM)
 	}
 
 	monthMap := map[string]interface{}{
@@ -310,7 +316,7 @@ func checkMonth(monthYYYYMM string) error {
 	}
 	monthBytes, err := toml.Parser().Marshal(monthMap)
 	if err != nil {
-		return WrapWithStack(err, "Error: unable to parse boards configuration")
+		return WrapWithStack(err, unableToParseUserConfMsg)
 	}
 
 	fmt.Printf("%s\n", monthBytes)
@@ -340,7 +346,7 @@ func getBoardIDForMonth(month string) int {
 func getBoard(mondayAPIClient *MondayAPIClient, monthYYYYMM string) error {
 	boardID := getBoardIDForMonth(monthYYYYMM)
 	if boardID == 0 {
-		return errors.Errorf("boards.toml: board_id not found for month %q", monthYYYYMM)
+		return WithStackF("%q: month not found in boards configuration. Exiting.", monthYYYYMM)
 	}
 	logger.Debugw("getBoardByID", "month", monthYYYYMM, "boardID", boardID)
 	board, err := mondayAPIClient.GetBoardByID(boardID)
@@ -359,17 +365,17 @@ func getGroupIDForDay(month, day string) string {
 
 func createOne(mondayAPIClient *MondayAPIClient, dayYYYYMMDD, itemName, hours string) error {
 	if len(dayYYYYMMDD) != 10 {
-		return errors.Errorf("provided day is not in format yyyy-mm-dd: %q", dayYYYYMMDD)
+		return WithStackF("%q: provided day is not in format yyyy-mm-dd. Exiting.", dayYYYYMMDD)
 	}
 	month := dayYYYYMMDD[0:7]
 	boardID := getBoardIDForMonth(month)
 	if boardID == 0 {
-		return errors.Errorf("boards.toml: board_id not found for month %q", month)
+		return WithStackF("%q: month not found in boards configuration. Exiting.", month)
 	}
 	day := dayYYYYMMDD[7:10]
 	groupID := getGroupIDForDay(month, day)
 	if groupID == "" {
-		return errors.Errorf("boards.toml: group_id not found for month %q and day %q", month, day)
+		return WithStackF("\"month.%s.days.%s\": group_id not found in boards configuration. Exiting.", month, day)
 	}
 	logger.Debugw("createOne", "day", dayYYYYMMDD, "boardID", boardID, "groupID", groupID, "itemName", itemName, "hours", hours)
 

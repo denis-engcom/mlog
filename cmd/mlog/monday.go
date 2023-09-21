@@ -58,7 +58,8 @@ func (m *MondayAPIClient) GetBoardByID(boardID int) (*Board, error) {
 	var gbq GetBoardsQuery
 	err := m.client.Query(context.TODO(), &gbq, vars)
 	if err != nil {
-		return nil, err
+		return nil, WrapWithStackF(err,
+			"A problem occurred when contacting monday.com. Exiting.")
 	}
 	return &gbq.Boards[0], nil
 }
@@ -79,7 +80,7 @@ func (m *MondayAPIClient) CreateLogItem(boardID int, groupID, itemName, hours st
 	// Validating it's a float, but can still make direct use of the string value in the request.
 	_, err := strconv.ParseFloat(hours, 64)
 	if err != nil {
-		return nil, err
+		return nil, WrapWithStackF(err, "%q: unable to parse hours as a number. Exiting.", hours)
 	}
 	// Person and Hours key-value pairs have to be provided together as a JSON-encoded string property.
 	columnValues := fmt.Sprintf(`{"%s":"%s","%s":%s}`, m.personColumnID, m.loggingUserID, m.hoursColumnID, hours)
@@ -93,7 +94,8 @@ func (m *MondayAPIClient) CreateLogItem(boardID int, groupID, itemName, hours st
 	var update CreateLogItemMutate
 	err = m.client.Mutate(context.TODO(), &update, vars)
 	if err != nil {
-		return nil, err
+		return nil, WrapWithStackF(err,
+			"A problem occurred when contacting monday.com. Please verify on monday.com whether a log entry was created or not. Exiting.")
 	}
 	return &update, nil
 }
