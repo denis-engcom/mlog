@@ -3,9 +3,7 @@ package main
 import (
 	"fmt"
 
-	// "github.com/carlmjohnson/exitcode"
 	"github.com/go-errors/errors"
-	// "github.com/urfave/cli/v2"
 )
 
 // TODO apply new error handling everywhere
@@ -51,8 +49,16 @@ func WithStack(msg string) error {
 	return NewCommandMessage(nil, msg)
 }
 
+func WithStackF(format string, a ...any) error {
+	return NewCommandMessage(nil, fmt.Sprintf(format, a...))
+}
+
 func WrapWithStack(err error, msg string) error {
 	return NewCommandMessage(err, msg)
+}
+
+func WrapWithStackF(err error, format string, a ...any) error {
+	return NewCommandMessage(err, fmt.Sprintf(format, a...))
 }
 
 func NewCommandMessage(err error, msg string) error {

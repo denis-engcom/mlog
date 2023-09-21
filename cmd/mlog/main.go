@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	// "log"
 	"net/http"
 	"os"
 	"strconv"
@@ -21,10 +21,10 @@ import (
 )
 
 var (
-	configFilePath     string
-	boardsDataFilePath string
+	userConfFilePath   string
+	boardsConfFilePath string
 	userConf           = koanf.New(".")
-	boardsData         = koanf.New(".")
+	boardsConf         = koanf.New(".")
 	logger             *zap.SugaredLogger
 )
 
@@ -39,20 +39,6 @@ func main() {
 	devLogger := zap.Must(devLoggerConfig.Build())
 	defer devLogger.Sync()
 	logger = devLogger.Sugar()
-
-	// TODO prompt for missing properties and record in file
-	//if errors.Is(err, fs.ErrNotExist) {
-	//}
-	var err error
-	configFilePath, err = xdg.ConfigFile("mlog/config.toml")
-	if err != nil {
-		log.Fatalf("error loading config: %+v", err)
-	}
-
-	boardsDataFilePath, err = xdg.DataFile("mlog/boards.toml")
-	if err != nil {
-		log.Fatalf("error loading config: %+v", err)
-	}
 
 	// TODO version command (in addition to -v)
 	app := &cli.App{
@@ -70,69 +56,15 @@ func main() {
 		},
 		Commands: cli.Commands{
 			{
-				Name:        "configuration",
-				Aliases:     []string{"cfg"},
-				Description: "Print the path of config files on your system",
-				Action: func(cCtx *cli.Context) error {
-					fmt.Printf("User configuration path: %s\n", configFilePath)
-					fmt.Printf("Board data path:         %s\n", boardsDataFilePath)
-
-					if err := boardsData.Load(file.Provider(boardsDataFilePath), toml.Parser()); err == nil {
-						description := boardsData.String("description")
-						if description != "" {
-							fmt.Println("- Description: " + description)
-						}
-					}
-
-					return nil
-				},
+				Name:        "setup",
+				Description: "Setup configurations files needed by other mlog commands",
+				Action:      setup,
 			},
 			{
 				Name:        "update",
 				Aliases:     []string{"u"},
 				Description: "Fetch the latest boards.toml configuration",
-				Action: func(cCtx *cli.Context) error {
-					boardsURL := "https://denis-engcom.github.io/mlog/boards.toml"
-					boardsResponse, err := http.Get(boardsURL)
-					if err != nil {
-						return err
-					}
-					defer boardsResponse.Body.Close()
-
-					// Download into a temporary file.
-					// When everything looks good, replace real file at the end as a final step.
-					boardsFile, err := os.Create(boardsDataFilePath + ".tmp")
-					if err != nil {
-						return err
-					}
-					defer boardsFile.Close()
-
-					n, err := io.Copy(boardsFile, boardsResponse.Body)
-					if err != nil {
-						return err
-					}
-					// Close early to allow the upcoming rename to work.
-					boardsFile.Close()
-
-					err = os.Rename(boardsDataFilePath+".tmp", boardsDataFilePath)
-					if err != nil {
-						return err
-					}
-					fmt.Printf("GET %s (%d bytes) - successful\n", boardsURL, n)
-					fmt.Printf("Saved to %s\n", boardsDataFilePath)
-
-					boardsData = koanf.New(".")
-					if err := boardsData.Load(file.Provider(boardsDataFilePath), toml.Parser()); err == nil {
-						description := boardsData.String("description")
-						if description != "" {
-							fmt.Println("- Description: " + description)
-						}
-					}
-
-					fmt.Println("Update complete without errors")
-
-					return nil
-				},
+				Action:      update,
 			},
 			{
 				Name:        "month",
@@ -206,26 +138,166 @@ func main() {
 	app.Run(os.Args)
 }
 
+func loadConfPaths() error {
+	// TODO prompt for missing properties and record in file
+	//if errors.Is(err, fs.ErrNotExist) {
+	//}
+	var err error
+	userConfFilePath, err = xdg.ConfigFile("mlog/config.toml")
+	if err != nil {
+		return WrapWithStack(err, "Error: unable to locate user configuration file")
+	}
+
+	boardsConfFilePath, err = xdg.DataFile("mlog/boards.toml")
+	if err != nil {
+		return WrapWithStack(err, "Error: unable to locate boards configuration file")
+	}
+	return nil
+}
+
 func loadConf() error {
-	if err := userConf.Load(file.Provider(configFilePath), toml.Parser()); err != nil {
+	err := loadConfPaths()
+	if err != nil {
+		return err
+	}
+
+	if err := userConf.Load(file.Provider(userConfFilePath), toml.Parser()); err != nil {
 		// log.Fatalf("error loading config: %+v", err)
 		// "See config.example.toml on github.com/denis-engcom/mlog for instructions on how to fill a configuration file"
-		return WrapWithStack(err, "Unable to parse user configuration file: "+configFilePath)
+		return WrapWithStack(err,
+			"Unable to parse user configuration file (missing or incorrectly formatted): "+userConfFilePath)
 	}
-	if err := boardsData.Load(file.Provider(boardsDataFilePath), toml.Parser()); err != nil {
+	if err := boardsConf.Load(file.Provider(boardsConfFilePath), toml.Parser()); err != nil {
 		// log.Fatalf("error loading config: %+v", err)
 		// "Please run `mlog update` to fetch the latest boards configuration file"
-		return WrapWithStack(err, "Unable to parse boards configuration file: "+boardsDataFilePath)
+		return WrapWithStack(err, "Unable to parse boards configuration file (missing or incorrectly formatted): "+boardsConfFilePath)
 	}
+	return nil
+}
+
+func setup(cCtx *cli.Context) error {
+	err := loadConfPaths()
+	if err != nil {
+		return err
+	}
+
+	validConfiguration := true
+	fmt.Printf("User configuration path:   %s\n", userConfFilePath)
+	if err := userConf.Load(file.Provider(userConfFilePath), toml.Parser()); err != nil {
+		fmt.Println("❌ Unable to parse file (missing or incorrectly formatted)")
+		fmt.Println("❌ Missing api_access_token")
+		fmt.Println("❌ Missing logging_user_id")
+		validConfiguration = false
+	} else {
+		apiAccessToken := userConf.String("api_access_token")
+		loggingUserID := userConf.String("logging_user_id")
+		if apiAccessToken != "" && loggingUserID != "" {
+			fmt.Println("✅ File is valid")
+		} else {
+			if apiAccessToken == "" {
+				fmt.Println("❌ Missing api_access_token")
+				validConfiguration = false
+			}
+			if loggingUserID == "" {
+				fmt.Println("❌ Missing logging_user_id")
+				validConfiguration = false
+			}
+		}
+	}
+
+	if !validConfiguration {
+		fmt.Println("(skipping boards configuration)")
+		return WithStack("The user configuration has one or more validation errors.\nRefer to github.com/denis-engcom/mlog - config.example.toml for how to configure the file properly.")
+	}
+
+	fmt.Printf("Boards configuration path: %s\n", boardsConfFilePath)
+	if err := boardsConf.Load(file.Provider(boardsConfFilePath), toml.Parser()); err != nil {
+		fmt.Println("❌ Unable to parse file (missing or incorrectly formatted)")
+		fmt.Println("❌ Missing person_column_id")
+		fmt.Println("❌ Missing hours_column_id")
+		validConfiguration = false
+	} else {
+		personColumnID := boardsConf.MustString("person_column_id")
+		hoursColumnID := boardsConf.MustString("hours_column_id")
+		description := boardsConf.String("description")
+		if personColumnID != "" && hoursColumnID != "" {
+			fmt.Println("✅ File is valid")
+		} else {
+			if personColumnID == "" {
+				fmt.Println("❌ Missing person_column_id")
+				validConfiguration = false
+			}
+			if hoursColumnID == "" {
+				fmt.Println("❌ Missing hours_column_id")
+				validConfiguration = false
+			}
+		}
+		if description != "" {
+			fmt.Println("✅ Description: " + description)
+		}
+	}
+
+	if !validConfiguration {
+		return WithStack("The boards configuration has one or more validation errors.\nRun `mlog update` to fetch the latest board configuration.")
+	}
+	fmt.Println("Setup complete without errors.")
+	return nil
+}
+
+func update(cCtx *cli.Context) error {
+	err := loadConfPaths()
+	if err != nil {
+		return err
+	}
+
+	boardsURL := "https://denis-engcom.github.io/mlog/boards.toml"
+	boardsResponse, err := http.Get(boardsURL)
+	if err != nil {
+		return err
+	}
+	defer boardsResponse.Body.Close()
+
+	// Download into a temporary file.
+	// When everything looks good, replace real file at the end as a final step.
+	boardsFile, err := os.Create(boardsConfFilePath + ".tmp")
+	if err != nil {
+		return err
+	}
+	defer boardsFile.Close()
+
+	n, err := io.Copy(boardsFile, boardsResponse.Body)
+	if err != nil {
+		return err
+	}
+	// Close early to allow the upcoming rename to work.
+	boardsFile.Close()
+
+	err = os.Rename(boardsConfFilePath+".tmp", boardsConfFilePath)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("GET %s (%d bytes) - successful\n", boardsURL, n)
+	fmt.Printf("Saved to %s\n", boardsConfFilePath)
+
+	boardsConf = koanf.New(".")
+	if err := boardsConf.Load(file.Provider(boardsConfFilePath), toml.Parser()); err == nil {
+		description := boardsConf.String("description")
+		if description != "" {
+			fmt.Println("✅ Description: " + description)
+		}
+	}
+
+	fmt.Println("Update complete without errors.")
+
 	return nil
 }
 
 func checkMonth(monthYYYYMM string) error {
 	monthKey := fmt.Sprintf("months.%s", monthYYYYMM)
 	var monthConf Month
-	err := boardsData.Unmarshal(monthKey, &monthConf)
+	err := boardsConf.Unmarshal(monthKey, &monthConf)
 	if err != nil {
-		return WrapWithStack(err, "Unable to parse boards configuration file: "+boardsDataFilePath)
+		return WrapWithStack(err, "Unable to parse boards configuration file: "+boardsConfFilePath)
 	}
 	if monthConf.BoardID == 0 {
 		msg := fmt.Sprintf("boards.toml: month not found: %q", monthYYYYMM)
@@ -262,7 +334,7 @@ func getBoardByID(mondayAPIClient *MondayAPIClient, boardID string) error {
 
 func getBoardIDForMonth(month string) int {
 	key := fmt.Sprintf("months.%s.board_id", month)
-	return boardsData.Int(key)
+	return boardsConf.Int(key)
 }
 
 func getBoard(mondayAPIClient *MondayAPIClient, monthYYYYMM string) error {
@@ -282,7 +354,7 @@ func getBoard(mondayAPIClient *MondayAPIClient, monthYYYYMM string) error {
 
 func getGroupIDForDay(month, day string) string {
 	key := fmt.Sprintf("months.%s.days.%s", month, day)
-	return boardsData.String(key)
+	return boardsConf.String(key)
 }
 
 func createOne(mondayAPIClient *MondayAPIClient, dayYYYYMMDD, itemName, hours string) error {
