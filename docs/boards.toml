@@ -1,3 +1,8 @@
+# Run `mlog u` to fetch the latest version of this file.
+
+# For users to know which config they have downloaded
+description = "Board configuration for months August 2023 to September 2023 (updated on 2023-09-20)"
+
 # These column IDs are needed to populate the "person" and "hours" field
 # They appear to be stable month-to-month
 person_column_id = "person7"
@@ -6,7 +11,8 @@ hours_column_id = "hours7"
 # Idea is to accept a log's date as yyyy-mm-dd and split in two: ["yyyy-mm", "-dd"]
 # 1. Locate the relevant month to query the correct board
 # 2. Locate the correct day to know which group to interact with
-# Also, unlike config.toml, this file would be embedded in the build so that users can update the build to get the latest months config.
+
+# Previous months - I'll backfill day-to-group mappings if they're needed.
 [months.2023-05]
 board_id = 4387022645
 
@@ -16,6 +22,7 @@ board_id = 4547507308
 [months.2023-07]
 board_id = 4721697359
 
+# Full boards configuration starting at August 2023
 [months.2023-08]
 board_id = 4925671275
 [months.2023-08.days]
@@ -50,4 +57,3 @@ board_id = 4925671275
 "-29" = "tue_aug_29"
 "-30" = "wed_aug_30"
 "-31" = "thu_aug_31"
-

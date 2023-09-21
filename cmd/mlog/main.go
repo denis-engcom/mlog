@@ -4,7 +4,9 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 
@@ -19,17 +21,12 @@ import (
 )
 
 var (
-	userConf   = koanf.New(".")
-	boardsData = koanf.New(".")
-	logger     *zap.SugaredLogger
+	configFilePath     string
+	boardsDataFilePath string
+	userConf           = koanf.New(".")
+	boardsData         = koanf.New(".")
+	logger             *zap.SugaredLogger
 )
-
-// type BoardsData struct {
-// 	Months map[string]Month `koanf:"months"`
-// }
-
-// go embed boards.toml
-// var boardsTOML []byte
 
 type Month struct {
 	BoardID uint64            `koanf:"board_id"`
@@ -43,35 +40,21 @@ func main() {
 	defer devLogger.Sync()
 	logger = devLogger.Sugar()
 
-	// TODO relocate conf parsing to happen in subcommand
-
 	// TODO prompt for missing properties and record in file
 	//if errors.Is(err, fs.ErrNotExist) {
 	//}
-	configFilePath, err := xdg.ConfigFile("mlog/config.toml")
+	var err error
+	configFilePath, err = xdg.ConfigFile("mlog/config.toml")
 	if err != nil {
 		log.Fatalf("error loading config: %+v", err)
 	}
 
-	if err := userConf.Load(file.Provider(configFilePath), toml.Parser()); err != nil {
-		log.Fatalf("error loading config: %+v", err)
-	}
-
-	// TODO Update `mlog get-boards` to somehow fetch this conf?
-	// How best to propagate this conf to cli users?
-	// Maybe have ability to download from github? Need convenient CLI login functionality though.
-	boardsDataFilePath, err := xdg.DataFile("mlog/boards.toml")
+	boardsDataFilePath, err = xdg.DataFile("mlog/boards.toml")
 	if err != nil {
 		log.Fatalf("error loading config: %+v", err)
 	}
 
-	if err := boardsData.Load(file.Provider(boardsDataFilePath), toml.Parser()); err != nil {
-		log.Fatalf("error loading config: %+v", err)
-	}
-
-	mondayAPIClient := NewMondayAPIClient()
-
-	// TODO config command prints the paths of config/data files
+	// TODO version command (in addition to -v)
 	app := &cli.App{
 		Name:        "mlog",
 		Usage:       "Processes timelog input and generates aggregated event information.",
@@ -91,6 +74,46 @@ func main() {
 				Action: func(cCtx *cli.Context) error {
 					fmt.Printf("User configuration path: %s\n", configFilePath)
 					fmt.Printf("Board data path:         %s\n", boardsDataFilePath)
+					// TODO print boards configuration description
+					return nil
+				},
+			},
+			{
+				Name:        "update",
+				Aliases:     []string{"u"},
+				Description: "Fetch the latest boards.toml configuration",
+				Action: func(cCtx *cli.Context) error {
+					boardsURL := "https://denis-engcom.github.io/mlog/boards.toml"
+					boardsResponse, err := http.Get(boardsURL)
+					if err != nil {
+						return err
+					}
+					defer boardsResponse.Body.Close()
+
+					// Download into a temporary file.
+					// When everything looks good, replace real file at the end as a final step.
+					boardsFile, err := os.Create(boardsDataFilePath + ".tmp")
+					if err != nil {
+						return err
+					}
+					defer boardsFile.Close()
+
+					n, err := io.Copy(boardsFile, boardsResponse.Body)
+					if err != nil {
+						return err
+					}
+					// Close early to allow the upcoming rename to work.
+					boardsFile.Close()
+
+					err = os.Rename(boardsDataFilePath+".tmp", boardsDataFilePath)
+					if err != nil {
+						return err
+					}
+					fmt.Printf("GET %s (%d bytes) - successful\n", boardsURL, n)
+					fmt.Printf("Saved to %s.\n", boardsDataFilePath)
+					// TODO print boards configuration description
+					fmt.Println("Update complete.")
+
 					return nil
 				},
 			},
@@ -100,6 +123,11 @@ func main() {
 				ArgsUsage:   "<yyyy-mm>",
 				Description: "Print boards.toml information for a given month",
 				Action: func(cCtx *cli.Context) error {
+					err := loadConf()
+					if err != nil {
+						return err
+					}
+
 					return checkMonth(cCtx.Args().First())
 				},
 			},
@@ -109,6 +137,13 @@ func main() {
 				ArgsUsage:   "<yyyy-mm-dd> <item-description> <hours>",
 				Description: "Create one log entry with info provided on the command line",
 				Action: func(cCtx *cli.Context) error {
+					err := loadConf()
+					if err != nil {
+						return err
+					}
+
+					mondayAPIClient := NewMondayAPIClient()
+
 					args := cCtx.Args()
 					return createOne(mondayAPIClient, args.Get(0), args.Get(1), args.Get(2))
 				},
@@ -119,6 +154,13 @@ func main() {
 				ArgsUsage:   "<board-id>",
 				Description: "(Admin command) get board information by board-id to populate boards.toml",
 				Action: func(cCtx *cli.Context) error {
+					err := loadConf()
+					if err != nil {
+						return err
+					}
+
+					mondayAPIClient := NewMondayAPIClient()
+
 					return getBoardByID(mondayAPIClient, cCtx.Args().First())
 				},
 			},
@@ -128,6 +170,22 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		logger.Fatalf("%+v", err)
 	}
+}
+
+// TODO Have "nice error message" for command line, and stack traces for logs
+// TODO Leverage exitcode package
+func loadConf() error {
+	if err := userConf.Load(file.Provider(configFilePath), toml.Parser()); err != nil {
+		// log.Fatalf("error loading config: %+v", err)
+		// "See config.example.toml on github.com/denis-engcom/mlog for instructions on how to fill a configuration file"
+		return errors.WithStack(err)
+	}
+	if err := boardsData.Load(file.Provider(boardsDataFilePath), toml.Parser()); err != nil {
+		// log.Fatalf("error loading config: %+v", err)
+		// "Please run `mlog update` to fetch the latest boards configuration file"
+		return errors.WithStack(err)
+	}
+	return nil
 }
 
 func checkMonth(monthYYYYMM string) error {
