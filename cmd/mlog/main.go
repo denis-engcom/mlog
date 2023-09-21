@@ -10,11 +10,11 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 
 	"github.com/adrg/xdg"
+	"github.com/go-errors/errors"
 	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
@@ -65,7 +65,9 @@ func main() {
 		Version:              "0.2.0",
 		HideHelpCommand:      true,
 		EnableBashCompletion: true,
-
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "debug", Aliases: []string{"d"}},
+		},
 		Commands: cli.Commands{
 			{
 				Name:        "configuration",
@@ -180,25 +182,40 @@ func main() {
 				},
 			},
 		},
+		// Adapt error handling to...
+		// * printing stack traces during debug mode
+		// * using errors.As to get ExitCoder at any level for printing
+		ExitErrHandler: func(cCtx *cli.Context, err error) {
+			var sErr *errors.Error
+			if cCtx.Bool("debug") && errors.As(err, &sErr) {
+				fmt.Fprint(cli.ErrWriter, sErr.ErrorStack())
+			} else if cmErr := CommandMessager(nil); errors.As(err, &cmErr) {
+				fmt.Fprintln(cli.ErrWriter, cmErr.Message())
+			} else if err != nil {
+				fmt.Fprintf(cli.ErrWriter, "%v\n", err)
+			}
+
+			if ecErr := cli.ExitCoder(nil); errors.As(err, &ecErr) {
+				cli.OsExiter(ecErr.ExitCode())
+			} else if err != nil {
+				cli.OsExiter(1)
+			}
+		},
 	}
 
-	if err := app.Run(os.Args); err != nil {
-		logger.Fatalf("%+v", err)
-	}
+	app.Run(os.Args)
 }
 
-// TODO Have "nice error message" for command line, and stack traces for logs
-// TODO Leverage exitcode package
 func loadConf() error {
 	if err := userConf.Load(file.Provider(configFilePath), toml.Parser()); err != nil {
 		// log.Fatalf("error loading config: %+v", err)
 		// "See config.example.toml on github.com/denis-engcom/mlog for instructions on how to fill a configuration file"
-		return errors.WithStack(err)
+		return WrapWithStack(err, "Unable to parse user configuration file: "+configFilePath)
 	}
 	if err := boardsData.Load(file.Provider(boardsDataFilePath), toml.Parser()); err != nil {
 		// log.Fatalf("error loading config: %+v", err)
 		// "Please run `mlog update` to fetch the latest boards configuration file"
-		return errors.WithStack(err)
+		return WrapWithStack(err, "Unable to parse boards configuration file: "+boardsDataFilePath)
 	}
 	return nil
 }
@@ -208,10 +225,11 @@ func checkMonth(monthYYYYMM string) error {
 	var monthConf Month
 	err := boardsData.Unmarshal(monthKey, &monthConf)
 	if err != nil {
-		return err
+		return WrapWithStack(err, "Unable to parse boards configuration file: "+boardsDataFilePath)
 	}
 	if monthConf.BoardID == 0 {
-		return errors.Errorf("boards.toml: month not found: %q", monthYYYYMM)
+		msg := fmt.Sprintf("boards.toml: month not found: %q", monthYYYYMM)
+		return WithStack(msg)
 	}
 
 	monthMap := map[string]interface{}{
@@ -220,7 +238,7 @@ func checkMonth(monthYYYYMM string) error {
 	}
 	monthBytes, err := toml.Parser().Marshal(monthMap)
 	if err != nil {
-		return err
+		return WrapWithStack(err, "Error: unable to parse boards configuration")
 	}
 
 	fmt.Printf("%s\n", monthBytes)
