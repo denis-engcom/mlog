@@ -14,17 +14,12 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/go-errors/errors"
-	"github.com/knadh/koanf/parsers/toml"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/v2"
 	ptoml "github.com/pelletier/go-toml/v2"
 )
 
 var (
 	userConfFilePath   string
 	boardsConfFilePath string
-	userConf           = koanf.New(".")
-	boardsConf         = koanf.New(".")
 	logger             *zap.SugaredLogger
 )
 
@@ -34,15 +29,15 @@ type UserConf struct {
 }
 
 type BoardsConf struct {
-	PersonColumnID string           `toml:"person_column_id"`
-	HoursColumnID  string           `toml:"hours_column_id"`
-	Description    string           `toml:"description"`
-	Months         map[string]Month `toml:"months"`
+	PersonColumnID string            `toml:"person_column_id"`
+	HoursColumnID  string            `toml:"hours_column_id"`
+	Description    string            `toml:"description"`
+	Months         map[string]*Month `toml:"months"`
 }
 
 type Month struct {
-	BoardID uint64            `koanf:"board_id",toml:"board_id"`
-	Days    map[string]string `koanf:"days",toml:"board_id"`
+	BoardID string            `toml:"board_id"`
+	Days    map[string]string `toml:"days"`
 }
 
 func main() {
@@ -86,33 +81,55 @@ func main() {
 				Action:      update,
 			},
 			{
-				Name:        "month",
-				ArgsUsage:   "<yyyy-mm>",
-				Description: "Print boards.toml information for a given month",
-				Action: func(cCtx *cli.Context) error {
-					err := loadConf()
-					if err != nil {
-						return err
-					}
-
-					return checkMonth(cCtx.Args().First())
-				},
-			},
-			{
 				Name:        "create-one",
 				Aliases:     []string{"co"},
 				ArgsUsage:   "<yyyy-mm-dd> <item-description> <hours>",
 				Description: "Create one log entry with info provided on the command line",
 				Action: func(cCtx *cli.Context) error {
-					err := loadConf()
+					userConf, boardsConf, err := loadConf()
 					if err != nil {
 						return err
 					}
 
-					mondayAPIClient := NewMondayAPIClient()
+					mondayAPIClient := NewMondayAPIClient(
+						userConf.APIAccessToken,
+						userConf.LoggingUserID,
+						boardsConf.PersonColumnID,
+						boardsConf.HoursColumnID)
 
 					args := cCtx.Args()
-					return createOne(mondayAPIClient, args.Get(0), args.Get(1), args.Get(2))
+					dayYYYYMMDD, itemName, hours := args.Get(0), args.Get(1), args.Get(2)
+
+					if len(dayYYYYMMDD) != 10 {
+						return WithStackF("%q: provided day is not in format yyyy-mm-dd. Exiting.", dayYYYYMMDD)
+					}
+
+					monthYYYYMM := dayYYYYMMDD[0:7]
+					if len(boardsConf.Months) == 0 {
+						return WithStackF("\"months.%s.board_id\": not found in boards configuration. Exiting.", monthYYYYMM)
+					}
+					month := boardsConf.Months[monthYYYYMM]
+					boardID := month.BoardID
+					if month == nil || boardID == "" {
+						return WithStackF("\"months.%s.board_id\": not found in boards configuration. Exiting.", monthYYYYMM)
+					}
+
+					dayDD := dayYYYYMMDD[7:10]
+					if len(month.Days) == 0 {
+						return WithStackF("\"month.%s.days.%s\": not found in boards configuration. Exiting.", monthYYYYMM, dayDD)
+					}
+					dayGroupID := month.Days[dayDD]
+					if dayGroupID == "" {
+						return WithStackF("\"month.%s.days.%s\": not found in boards configuration. Exiting.", monthYYYYMM, dayDD)
+					}
+					logger.Debugw("createOne", "day", dayYYYYMMDD, "boardID", boardID, "groupID", dayGroupID, "itemName", itemName, "hours", hours)
+
+					res, err := mondayAPIClient.CreateLogItem(boardID, dayGroupID, itemName, hours)
+					if err != nil {
+						return err
+					}
+					fmt.Printf("https://magicboard.monday.com/boards/%d/pulses/%s\n", boardID, res.Create_Item.ID)
+					return nil
 				},
 			},
 			{
@@ -121,32 +138,20 @@ func main() {
 				ArgsUsage:   "<board-id>",
 				Description: "(Admin command) get board information by board-id to populate boards.toml",
 				Action: func(cCtx *cli.Context) error {
-					err := loadConf()
+					userConf, boardsConf, err := loadConf()
 					if err != nil {
 						return err
 					}
 
-					mondayAPIClient := NewMondayAPIClient()
+					mondayAPIClient := NewMondayAPIClient(
+						userConf.APIAccessToken,
+						userConf.LoggingUserID,
+						boardsConf.PersonColumnID,
+						boardsConf.HoursColumnID)
 
 					return getBoardByID(mondayAPIClient, cCtx.Args().First())
 				},
 			},
-			//{
-			//	Name:        "get-board",
-			//	Aliases:     []string{"gb"},
-			//	ArgsUsage:   "<yyyy-mm>",
-			//	Description: "(Admin command) get board information by month to populate boards.toml",
-			//	Action: func(cCtx *cli.Context) error {
-			//		err := loadConf()
-			//		if err != nil {
-			//			return err
-			//		}
-			//
-			//		mondayAPIClient := NewMondayAPIClient()
-			//
-			//		return getBoard(mondayAPIClient, cCtx.Args().First())
-			//	},
-			//},
 		},
 		// Adapt error handling to...
 		// * printing stack traces during debug mode
@@ -172,6 +177,36 @@ func main() {
 	app.Run(os.Args)
 }
 
+var unableToParseUserConfMsg = "Unable to parse user configuration file.\nRun `mlog setup` for error details."
+var unableToParseBoardsConfMsg = "Unable to parse boards configuration file.\nRun `mlog setup` for error details."
+
+func loadConf() (*UserConf, *BoardsConf, error) {
+	err := loadConfPaths()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var userConf UserConf
+	err = loadTOML(userConfFilePath, &userConf)
+	if err != nil {
+		return nil, nil, WrapWithStack(err, unableToParseUserConfMsg)
+	}
+	if userConf.APIAccessToken == "" || userConf.LoggingUserID == "" {
+		return nil, nil, WrapWithStack(err, unableToParseUserConfMsg)
+	}
+
+	var boardsConf BoardsConf
+	err = loadTOML(boardsConfFilePath, &boardsConf)
+	if err != nil {
+		return nil, nil, WrapWithStack(err, unableToParseBoardsConfMsg)
+	}
+	if boardsConf.PersonColumnID == "" || boardsConf.HoursColumnID == "" {
+		return nil, nil, WrapWithStack(err, unableToParseBoardsConfMsg)
+	}
+
+	return &userConf, &boardsConf, nil
+}
+
 func loadConfPaths() error {
 	var err error
 	userConfFilePath, err = xdg.ConfigFile("mlog/config.toml")
@@ -183,36 +218,6 @@ func loadConfPaths() error {
 	if err != nil {
 		return WrapWithStack(err, "Error: unable to locate boards configuration file. Please send a bug report to the developer. Exiting.")
 	}
-	return nil
-}
-
-var unableToParseUserConfMsg = "Unable to parse user configuration file.\nRun `mlog setup` for error details."
-var unableToParseBoardsConfMsg = "Unable to parse boards configuration file.\nRun `mlog setup` for error details."
-
-func loadConf() error {
-	err := loadConfPaths()
-	if err != nil {
-		return err
-	}
-
-	if err := userConf.Load(file.Provider(userConfFilePath), toml.Parser()); err != nil {
-		return WrapWithStack(err, unableToParseUserConfMsg)
-	}
-	apiAccessToken := userConf.String("api_access_token")
-	loggingUserID := userConf.String("logging_user_id")
-	if apiAccessToken == "" || loggingUserID == "" {
-		return WrapWithStack(err, unableToParseUserConfMsg)
-	}
-
-	if err := boardsConf.Load(file.Provider(boardsConfFilePath), toml.Parser()); err != nil {
-		return WrapWithStack(err, unableToParseBoardsConfMsg)
-	}
-	personColumnID := boardsConf.MustString("person_column_id")
-	hoursColumnID := boardsConf.MustString("hours_column_id")
-	if personColumnID == "" || hoursColumnID == "" {
-		return WrapWithStack(err, unableToParseBoardsConfMsg)
-	}
-
 	return nil
 }
 
@@ -288,6 +293,7 @@ func setup(cCtx *cli.Context) error {
 		if description != "" {
 			fmt.Println("✅ Description: " + description)
 		}
+		// TODO add summary of data by reusing checks from create-one
 	}
 
 	if !validConfiguration {
@@ -333,40 +339,14 @@ func update(cCtx *cli.Context) error {
 	fmt.Printf("GET %s (%d bytes) - successful\n", boardsURL, n)
 	fmt.Printf("Saved to %s\n", boardsConfFilePath)
 
-	boardsConf = koanf.New(".")
-	if err := boardsConf.Load(file.Provider(boardsConfFilePath), toml.Parser()); err == nil {
-		description := boardsConf.String("description")
-		if description != "" {
-			fmt.Println("✅ Description: " + description)
-		}
+	var boardsConf BoardsConf
+	err = loadTOML(boardsConfFilePath, &boardsConf)
+	if err == nil && boardsConf.Description != "" {
+		fmt.Println("✅ Description: " + boardsConf.Description)
 	}
 
 	fmt.Println("Update complete without errors.")
 
-	return nil
-}
-
-func checkMonth(monthYYYYMM string) error {
-	monthKey := fmt.Sprintf("months.%s", monthYYYYMM)
-	var monthConf Month
-	err := boardsConf.Unmarshal(monthKey, &monthConf)
-	if err != nil {
-		return WrapWithStack(err, unableToParseUserConfMsg)
-	}
-	if monthConf.BoardID == 0 {
-		return WithStackF("%q: month not found in boards configuration. Exiting.", monthYYYYMM)
-	}
-
-	monthMap := map[string]interface{}{
-		"board_id": monthConf.BoardID,
-		"days":     monthConf.Days,
-	}
-	monthBytes, err := toml.Parser().Marshal(monthMap)
-	if err != nil {
-		return WrapWithStack(err, unableToParseUserConfMsg)
-	}
-
-	fmt.Printf("%s\n", monthBytes)
 	return nil
 }
 
@@ -403,73 +383,4 @@ func getBoardByID(mondayAPIClient *MondayAPIClient, boardID string) error {
 		},
 	}
 	return ptoml.NewEncoder(os.Stdout).Encode(&content)
-}
-
-func getBoardIDForMonth(month string) int {
-	key := fmt.Sprintf("months.%s.board_id", month)
-	return boardsConf.Int(key)
-}
-
-func getBoard(mondayAPIClient *MondayAPIClient, monthYYYYMM string) error {
-	boardID := getBoardIDForMonth(monthYYYYMM)
-	if boardID == 0 {
-		return WithStackF("\"months.%s.board_id\": not found in boards configuration. Exiting.", monthYYYYMM)
-	}
-	logger.Debugw("getBoardByID", "month", monthYYYYMM, "boardID", boardID)
-	board, err := mondayAPIClient.GetBoardByID(boardID)
-	if err != nil {
-		return err
-	}
-
-	groups := map[string]string{}
-	for _, group := range board.Groups {
-		groups[group.Title] = group.ID
-	}
-	// Produce TOML like
-	//
-	// [months.2023-09]
-	// board_id = 1234567890
-	// [months.2023-09.days]
-	// 'Fri Sep 01' = 'fri_sep_01'
-	// 'Sat Sep 02' = 'sat_sep_02'
-	// ...
-	content := map[string]map[string]map[string]any{
-		"months": {
-			monthYYYYMM: {
-				"board_id": board.ID,
-				"name":     board.Name,
-				"days":     groups,
-			},
-		},
-	}
-	return ptoml.NewEncoder(os.Stdout).Encode(&content)
-}
-
-func getGroupIDForDay(month, day string) string {
-	key := fmt.Sprintf("months.%s.days.%s", month, day)
-	return boardsConf.String(key)
-}
-
-func createOne(mondayAPIClient *MondayAPIClient, dayYYYYMMDD, itemName, hours string) error {
-	if len(dayYYYYMMDD) != 10 {
-		return WithStackF("%q: provided day is not in format yyyy-mm-dd. Exiting.", dayYYYYMMDD)
-	}
-	month := dayYYYYMMDD[0:7]
-	boardID := getBoardIDForMonth(month)
-	if boardID == 0 {
-		return WithStackF("\"months.%s.board_id\": not found in boards configuration. Exiting.", month)
-	}
-	day := dayYYYYMMDD[7:10]
-	groupID := getGroupIDForDay(month, day)
-	if groupID == "" {
-		return WithStackF("\"month.%s.days.%s\": not found in boards configuration. Exiting.", month, day)
-	}
-	logger.Debugw("createOne", "day", dayYYYYMMDD, "boardID", boardID, "groupID", groupID, "itemName", itemName, "hours", hours)
-
-	res, err := mondayAPIClient.CreateLogItem(boardID, groupID, itemName, hours)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("https://magicboard.monday.com/boards/%d/pulses/%s\n", boardID, res.Create_Item.ID)
-	return nil
 }

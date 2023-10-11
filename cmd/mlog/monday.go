@@ -16,11 +16,7 @@ type MondayAPIClient struct {
 }
 
 // NewMondayAPIClient forms the client with common information needed during Monday API calls.
-func NewMondayAPIClient() *MondayAPIClient {
-	apiAccessToken := userConf.MustString("api_access_token")
-	loggingUserID := userConf.MustString("logging_user_id")
-	personColumnID := boardsConf.MustString("person_column_id")
-	hoursColumnID := boardsConf.MustString("hours_column_id")
+func NewMondayAPIClient(apiAccessToken, loggingUserID, personColumnID, hoursColumnID string) *MondayAPIClient {
 	client := graphql.NewClient("https://api.monday.com/v2/", nil).
 		WithRequestModifier(func(req *http.Request) {
 			req.Header.Add("Authorization", apiAccessToken)
@@ -76,7 +72,7 @@ type CreateLogItemMutate struct {
 }
 
 // CreateLogItem calls the Monday api "create_item" mutation.
-func (m *MondayAPIClient) CreateLogItem(boardID int, groupID, itemName, hours string) (*CreateLogItemMutate, error) {
+func (m *MondayAPIClient) CreateLogItem(boardID string, groupID, itemName, hours string) (*CreateLogItemMutate, error) {
 	// Validating it's a float, but can still make direct use of the string value in the request.
 	_, err := strconv.ParseFloat(hours, 64)
 	if err != nil {
