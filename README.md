@@ -49,6 +49,23 @@ board_id = 1234567890
 https://magicboard.monday.com/boards/1234567890/pulses/3216540987
 ```
 
+## Admin - Prepare boards.toml content every month
+
+```sh
+# Gets board info in TOML form, see if it looks reasonable
+➜ mlog gb 2023-08
+
+➜ mlog get-board-by-id 4925671275 | head -n 6 >> docs/boards.toml
+
+# Takes month's days, sorts numerically
+➜ mlog get-board-by-id 4925671275 | tail -n 31 | sort -k 3.1,3.3 >> docs/boards.toml
+
+# Then, adjust the "months.yyyy-mm..." keys and days KV pairs
+# Update the description field
+
+# Then, commit and push. The file will be made avaiable for `mlog update` via github pages
+```
+
 ## Future features to implement
 
 Drive pulse creation from config (TOML or CSV)...

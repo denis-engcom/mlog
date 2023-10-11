@@ -2,7 +2,6 @@ package main
 
 import (
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"io"
 	// "log"
@@ -29,9 +28,21 @@ var (
 	logger             *zap.SugaredLogger
 )
 
+type UserConf struct {
+	APIAccessToken string `toml:"api_access_token"`
+	LoggingUserID  string `toml:"logging_user_id"`
+}
+
+type BoardsConf struct {
+	PersonColumnID string           `toml:"person_column_id"`
+	HoursColumnID  string           `toml:"hours_column_id"`
+	Description    string           `toml:"description"`
+	Months         map[string]Month `toml:"months"`
+}
+
 type Month struct {
-	BoardID uint64            `koanf:"board_id"`
-	Days    map[string]string `koanf:"days"`
+	BoardID uint64            `koanf:"board_id",toml:"board_id"`
+	Days    map[string]string `koanf:"days",toml:"board_id"`
 }
 
 func main() {
@@ -105,8 +116,8 @@ func main() {
 				},
 			},
 			{
-				Name:        "get-board",
-				Aliases:     []string{"gb"},
+				Name:        "get-board-by-id",
+				Aliases:     []string{"gbid"},
 				ArgsUsage:   "<board-id>",
 				Description: "(Admin command) get board information by board-id to populate boards.toml",
 				Action: func(cCtx *cli.Context) error {
@@ -117,9 +128,25 @@ func main() {
 
 					mondayAPIClient := NewMondayAPIClient()
 
-					return getBoard(mondayAPIClient, cCtx.Args().First())
+					return getBoardByID(mondayAPIClient, cCtx.Args().First())
 				},
 			},
+			//{
+			//	Name:        "get-board",
+			//	Aliases:     []string{"gb"},
+			//	ArgsUsage:   "<yyyy-mm>",
+			//	Description: "(Admin command) get board information by month to populate boards.toml",
+			//	Action: func(cCtx *cli.Context) error {
+			//		err := loadConf()
+			//		if err != nil {
+			//			return err
+			//		}
+			//
+			//		mondayAPIClient := NewMondayAPIClient()
+			//
+			//		return getBoard(mondayAPIClient, cCtx.Args().First())
+			//	},
+			//},
 		},
 		// Adapt error handling to...
 		// * printing stack traces during debug mode
@@ -189,6 +216,14 @@ func loadConf() error {
 	return nil
 }
 
+func loadTOML(path string, obj any) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	return ptoml.NewDecoder(file).Decode(obj)
+}
+
 func setup(cCtx *cli.Context) error {
 	err := loadConfPaths()
 	if err != nil {
@@ -197,14 +232,16 @@ func setup(cCtx *cli.Context) error {
 
 	validConfiguration := true
 	fmt.Printf("User configuration path:   %s\n", userConfFilePath)
-	if err := userConf.Load(file.Provider(userConfFilePath), toml.Parser()); err != nil {
+	var userConf UserConf
+	err = loadTOML(userConfFilePath, &userConf)
+	if err != nil {
 		fmt.Println("❌ Unable to parse file (missing or incorrectly formatted)")
 		fmt.Println("❌ Missing api_access_token")
 		fmt.Println("❌ Missing logging_user_id")
 		validConfiguration = false
 	} else {
-		apiAccessToken := userConf.String("api_access_token")
-		loggingUserID := userConf.String("logging_user_id")
+		apiAccessToken := userConf.APIAccessToken
+		loggingUserID := userConf.LoggingUserID
 		if apiAccessToken != "" && loggingUserID != "" {
 			fmt.Println("✅ File is valid")
 		} else {
@@ -221,19 +258,21 @@ func setup(cCtx *cli.Context) error {
 
 	if !validConfiguration {
 		fmt.Println("(skipping boards configuration)")
-		return WithStack("The user configuration has one or more validation errors.\nRefer to github.com/denis-engcom/mlog - config.example.toml for how to configure the file properly.")
+		return WrapWithStack(err, "The user configuration has one or more validation errors.\nRefer to github.com/denis-engcom/mlog - config.example.toml for how to configure the file properly.")
 	}
 
 	fmt.Printf("Boards configuration path: %s\n", boardsConfFilePath)
-	if err := boardsConf.Load(file.Provider(boardsConfFilePath), toml.Parser()); err != nil {
+	var boardsConf BoardsConf
+	err = loadTOML(boardsConfFilePath, &boardsConf)
+	if err != nil {
 		fmt.Println("❌ Unable to parse file (missing or incorrectly formatted)")
 		fmt.Println("❌ Missing person_column_id")
 		fmt.Println("❌ Missing hours_column_id")
 		validConfiguration = false
 	} else {
-		personColumnID := boardsConf.MustString("person_column_id")
-		hoursColumnID := boardsConf.MustString("hours_column_id")
-		description := boardsConf.String("description")
+		personColumnID := boardsConf.PersonColumnID
+		hoursColumnID := boardsConf.HoursColumnID
+		description := boardsConf.Description
 		if personColumnID != "" && hoursColumnID != "" {
 			fmt.Println("✅ File is valid")
 		} else {
@@ -252,7 +291,7 @@ func setup(cCtx *cli.Context) error {
 	}
 
 	if !validConfiguration {
-		return WithStack("The boards configuration has one or more validation errors.\nRun `mlog update` to fetch the latest board configuration.")
+		return WrapWithStack(err, "The boards configuration has one or more validation errors.\nRun `mlog update` to fetch the latest board configuration.")
 	}
 	fmt.Println("Setup complete without errors.")
 	return nil
@@ -341,9 +380,29 @@ func getBoardByID(mondayAPIClient *MondayAPIClient, boardID string) error {
 	if err != nil {
 		return err
 	}
-	boardOutput, err := json.Marshal(board)
-	fmt.Println(string(boardOutput))
-	return nil
+
+	groups := map[string]string{}
+	for _, group := range board.Groups {
+		groups[group.Title] = group.ID
+	}
+	// Produce TOML like
+	//
+	// [months.2023-09]
+	// board_id = 1234567890
+	// [months.2023-09.days]
+	// 'Fri Sep 01' = 'fri_sep_01'
+	// 'Sat Sep 02' = 'sat_sep_02'
+	// ...
+	content := map[string]map[string]map[string]any{
+		"months": {
+			"yyyy-mm": {
+				"board_id": board.ID,
+				"name":     board.Name,
+				"days":     groups,
+			},
+		},
+	}
+	return ptoml.NewEncoder(os.Stdout).Encode(&content)
 }
 
 func getBoardIDForMonth(month string) int {
@@ -361,8 +420,6 @@ func getBoard(mondayAPIClient *MondayAPIClient, monthYYYYMM string) error {
 	if err != nil {
 		return err
 	}
-	//boardOutput, err := json.Marshal(board)
-	//fmt.Println(string(boardOutput))
 
 	groups := map[string]string{}
 	for _, group := range board.Groups {
@@ -378,7 +435,7 @@ func getBoard(mondayAPIClient *MondayAPIClient, monthYYYYMM string) error {
 	// ...
 	content := map[string]map[string]map[string]any{
 		"months": {
-			"2023-09": {
+			monthYYYYMM: {
 				"board_id": board.ID,
 				"name":     board.Name,
 				"days":     groups,

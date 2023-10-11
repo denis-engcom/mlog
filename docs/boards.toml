@@ -1,7 +1,7 @@
 # Run `mlog u` to fetch the latest version of this file.
 
 # For users to know which config they have downloaded
-description = mBoard configuration covering months August 2023 to September 2023 (updated on 2023-10-11)m
+description = 'Board configuration covering months August 2023 to September 2023 (updated on 2023-10-11)'
 
 # These column IDs are needed to populate the "person" and "hours" field
 # They appear to be stable month-to-month
