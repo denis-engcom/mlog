@@ -18,6 +18,7 @@ import (
 	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
+	ptoml "github.com/pelletier/go-toml/v2"
 )
 
 var (
@@ -109,7 +110,7 @@ func main() {
 
 					mondayAPIClient := NewMondayAPIClient()
 
-					return getBoardByID(mondayAPIClient, cCtx.Args().First())
+					return getBoard(mondayAPIClient, cCtx.Args().First())
 				},
 			},
 		},
@@ -346,16 +347,37 @@ func getBoardIDForMonth(month string) int {
 func getBoard(mondayAPIClient *MondayAPIClient, monthYYYYMM string) error {
 	boardID := getBoardIDForMonth(monthYYYYMM)
 	if boardID == 0 {
-		return WithStackF("%q: month not found in boards configuration. Exiting.", monthYYYYMM)
+		return WithStackF("\"months.%s.board_id\": not found in boards configuration. Exiting.", monthYYYYMM)
 	}
 	logger.Debugw("getBoardByID", "month", monthYYYYMM, "boardID", boardID)
 	board, err := mondayAPIClient.GetBoardByID(boardID)
 	if err != nil {
 		return err
 	}
-	boardOutput, err := json.Marshal(board)
-	fmt.Println(string(boardOutput))
-	return nil
+	//boardOutput, err := json.Marshal(board)
+	//fmt.Println(string(boardOutput))
+
+	groups := map[string]string{}
+	for _, group := range board.Groups {
+		groups[group.Title] = group.ID
+	}
+	// Produce TOML like
+	//
+	// [months.2023-09]
+	// board_id = 1234567890
+	// [months.2023-09.days]
+	// 'Fri Sep 01' = 'fri_sep_01'
+	// 'Sat Sep 02' = 'sat_sep_02'
+	// ...
+	content := map[string]map[string]map[string]any{
+		"months": {
+			"2023-09": {
+				"board_id": board.ID,
+				"days":     groups,
+			},
+		},
+	}
+	return ptoml.NewEncoder(os.Stdout).Encode(&content)
 }
 
 func getGroupIDForDay(month, day string) string {
@@ -370,12 +392,12 @@ func createOne(mondayAPIClient *MondayAPIClient, dayYYYYMMDD, itemName, hours st
 	month := dayYYYYMMDD[0:7]
 	boardID := getBoardIDForMonth(month)
 	if boardID == 0 {
-		return WithStackF("%q: month not found in boards configuration. Exiting.", month)
+		return WithStackF("\"months.%s.board_id\": not found in boards configuration. Exiting.", month)
 	}
 	day := dayYYYYMMDD[7:10]
 	groupID := getGroupIDForDay(month, day)
 	if groupID == "" {
-		return WithStackF("\"month.%s.days.%s\": group_id not found in boards configuration. Exiting.", month, day)
+		return WithStackF("\"month.%s.days.%s\": not found in boards configuration. Exiting.", month, day)
 	}
 	logger.Debugw("createOne", "day", dayYYYYMMDD, "boardID", boardID, "groupID", groupID, "itemName", itemName, "hours", hours)
 
