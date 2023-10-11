@@ -131,7 +131,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					fmt.Printf("https://magicboard.monday.com/boards/%d/pulses/%s\n", boardIDInt, res.Create_Item.ID)
+					fmt.Printf("https://magicboard.monday.com%s\n", res.Create_Item.Relative_Link)
 					return nil
 				},
 			},

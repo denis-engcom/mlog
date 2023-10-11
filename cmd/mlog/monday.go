@@ -67,7 +67,7 @@ func (_ JSONEncodedString) GetGraphQLType() string { return "JSON" }
 
 type CreateLogItemMutate struct {
 	Create_Item struct {
-		ID string
+		Relative_Link string
 	} `graphql:"create_item (board_id: $board_id, group_id: $group_id, item_name: $item_name, column_values: $column_values)"`
 }
 
