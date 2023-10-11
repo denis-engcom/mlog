@@ -72,7 +72,7 @@ type CreateLogItemMutate struct {
 }
 
 // CreateLogItem calls the Monday api "create_item" mutation.
-func (m *MondayAPIClient) CreateLogItem(boardID string, groupID, itemName, hours string) (*CreateLogItemMutate, error) {
+func (m *MondayAPIClient) CreateLogItem(boardID int, groupID, itemName, hours string) (*CreateLogItemMutate, error) {
 	// Validating it's a float, but can still make direct use of the string value in the request.
 	_, err := strconv.ParseFloat(hours, 64)
 	if err != nil {

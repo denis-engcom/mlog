@@ -109,9 +109,12 @@ func main() {
 						return WithStackF("\"months.%s.board_id\": not found in boards configuration. Exiting.", monthYYYYMM)
 					}
 					month := boardsConf.Months[monthYYYYMM]
-					boardID := month.BoardID
-					if month == nil || boardID == "" {
+					if month == nil || month.BoardID == "" {
 						return WithStackF("\"months.%s.board_id\": not found in boards configuration. Exiting.", monthYYYYMM)
+					}
+					boardIDInt, err := strconv.Atoi(month.BoardID)
+					if err != nil {
+						return WithStackF("\"months.%s.board_id\": not a number. Exiting.", monthYYYYMM)
 					}
 
 					dayDD := dayYYYYMMDD[7:10]
@@ -122,13 +125,13 @@ func main() {
 					if dayGroupID == "" {
 						return WithStackF("\"month.%s.days.%s\": not found in boards configuration. Exiting.", monthYYYYMM, dayDD)
 					}
-					logger.Debugw("createOne", "day", dayYYYYMMDD, "boardID", boardID, "groupID", dayGroupID, "itemName", itemName, "hours", hours)
+					logger.Debugw("createOne", "day", dayYYYYMMDD, "boardID", boardIDInt, "groupID", dayGroupID, "itemName", itemName, "hours", hours)
 
-					res, err := mondayAPIClient.CreateLogItem(boardID, dayGroupID, itemName, hours)
+					res, err := mondayAPIClient.CreateLogItem(boardIDInt, dayGroupID, itemName, hours)
 					if err != nil {
 						return err
 					}
-					fmt.Printf("https://magicboard.monday.com/boards/%d/pulses/%s\n", boardID, res.Create_Item.ID)
+					fmt.Printf("https://magicboard.monday.com/boards/%d/pulses/%s\n", boardIDInt, res.Create_Item.ID)
 					return nil
 				},
 			},
@@ -354,7 +357,7 @@ func getBoardByID(mondayAPIClient *MondayAPIClient, boardID string) error {
 	logger.Debugw("getBoardByID", "boardID", boardID)
 	boardIDInt, err := strconv.Atoi(boardID)
 	if err != nil {
-		return err
+		return WithStackF("\"%d\": not a number. Exiting.", boardID)
 	}
 	board, err := mondayAPIClient.GetBoardByID(boardIDInt)
 	if err != nil {
