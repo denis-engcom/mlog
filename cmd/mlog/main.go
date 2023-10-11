@@ -56,6 +56,13 @@ func main() {
 			&cli.BoolFlag{Name: "debug", Aliases: []string{"d"}},
 		},
 		Commands: cli.Commands{
+			// TODO New route to query items
+			// mlog get-items 2023-09
+			// mlog get-items 2023-09-01
+			// Display using https://github.com/cheynewallace/tabby
+			// TODO New route to query item link
+			// mlog get-link 5244659133
+			// "https://magicboard.monday.com" + relative_link
 			{
 				Name:        "setup",
 				Description: "Setup configuration files needed by the other mlog commands",
@@ -373,6 +380,7 @@ func getBoard(mondayAPIClient *MondayAPIClient, monthYYYYMM string) error {
 		"months": {
 			"2023-09": {
 				"board_id": board.ID,
+				"name":     board.Name,
 				"days":     groups,
 			},
 		},

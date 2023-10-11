@@ -1,18 +1,18 @@
 # Run `mlog u` to fetch the latest version of this file.
 
 # For users to know which config they have downloaded
-description = "Board configuration for months August 2023 to September 2023 (updated on 2023-09-20)"
+description = mBoard configuration covering months August 2023 to September 2023 (updated on 2023-10-11)m
 
 # These column IDs are needed to populate the "person" and "hours" field
 # They appear to be stable month-to-month
-person_column_id = "person7"
-hours_column_id = "hours7"
+person_column_id = 'person7'
+hours_column_id = 'hours7'
 
-# Idea is to accept a log's date as yyyy-mm-dd and split in two: ["yyyy-mm", "-dd"]
+# Idea is to accept a logms date as yyyy-mm-dd and split in two: ["yyyy-mm", "-dd"]
 # 1. Locate the relevant month to query the correct board
 # 2. Locate the correct day to know which group to interact with
 
-# Previous months - I'll backfill day-to-group mappings if they're needed.
+# Previous months - Imll backfill day-to-group mappings if they're needed.
 [months.2023-05]
 board_id = 4387022645
 
@@ -25,35 +25,74 @@ board_id = 4721697359
 # Full boards configuration starting at August 2023
 [months.2023-08]
 board_id = 4925671275
+name = 'Aug 2023 :Completed Work'
+
 [months.2023-08.days]
-"-01" = "tue_aug_01"  
-"-02" = "wed_aug_02"
-"-03" = "thu_aug_03"
-"-04" = "fri_aug_04"
-"-05" = "sat_aug_05"
-"-06" = "sun_aug_06"
-"-07" = "mon_aug_07"
-"-08" = "tue_aug_08"
-"-09" = "wed_aug_09"
-"-10" = "thu_aug_10"
-"-11" = "fri_aug_11"
-"-12" = "sat_aug_12"
-"-13" = "sun_aug_13"
-"-14" = "mon_aug_14"
-"-15" = "tue_aug_15"
-"-16" = "wed_aug_16"
-"-17" = "thu_aug_17"
-"-18" = "fri_aug_18"
-"-19" = "sat_aug_19"
-"-20" = "sun_aug_20"
-"-21" = "mon_aug_21"
-"-22" = "tue_aug_22"
-"-23" = "wed_aug_23"
-"-24" = "thu_aug_24"
-"-25" = "fri_aug_25"
-"-26" = "sat_aug_26"
-"-27" = "sun_aug_27"
-"-28" = "mon_aug_28"
-"-29" = "tue_aug_29"
-"-30" = "wed_aug_30"
-"-31" = "thu_aug_31"
+'-01' = 'tue_aug_01'
+'-02' = 'wed_aug_02'
+'-03' = 'thu_aug_03'
+'-04' = 'fri_aug_04'
+'-05' = 'sat_aug_05'
+'-06' = 'sun_aug_06'
+'-07' = 'mon_aug_07'
+'-08' = 'tue_aug_08'
+'-09' = 'wed_aug_09'
+'-10' = 'thu_aug_10'
+'-11' = 'fri_aug_11'
+'-12' = 'sat_aug_12'
+'-13' = 'sun_aug_13'
+'-14' = 'mon_aug_14'
+'-15' = 'tue_aug_15'
+'-16' = 'wed_aug_16'
+'-17' = 'thu_aug_17'
+'-18' = 'fri_aug_18'
+'-19' = 'sat_aug_19'
+'-20' = 'sun_aug_20'
+'-21' = 'mon_aug_21'
+'-22' = 'tue_aug_22'
+'-23' = 'wed_aug_23'
+'-24' = 'thu_aug_24'
+'-25' = 'fri_aug_25'
+'-26' = 'sat_aug_26'
+'-27' = 'sun_aug_27'
+'-28' = 'mon_aug_28'
+'-29' = 'tue_aug_29'
+'-30' = 'wed_aug_30'
+'-31' = 'thu_aug_31'
+
+[months.2023-09]
+board_id = '5064273451'
+name = 'Sep 2023 :Completed Work'
+
+[months.2023-09.days]
+'-01' = 'fri_sep_01'
+'-02' = 'sat_sep_02'
+'-03' = 'sun_sep_03'
+'-04' = 'mon_sep_04'
+'-05' = 'tue_sep_05'
+'-06' = 'wed_sep_06'
+'-07' = 'thu_sep_07'
+'-08' = 'fri_sep_08'
+'-09' = 'sat_sep_09'
+'-10' = 'sun_sep_10'
+'-11' = 'mon_sep_11'
+'-12' = 'tue_sep_12'
+'-13' = 'wed_sep_13'
+'-14' = 'thu_sep_14'
+'-15' = 'fri_sep_15'
+'-16' = 'sat_sep_16'
+'-17' = 'sun_sep_17'
+'-18' = 'mon_sep_18'
+'-19' = 'tue_sep_19'
+'-20' = 'wed_sep_20'
+'-21' = 'duplicate_of_fri_sep_22'
+'-22' = 'fri_sep_22'
+'-23' = 'sat_sep_23'
+'-24' = 'sun_sep_24'
+'-25' = 'mon_sep_25'
+'-26' = 'tue_sep_26'
+'-27' = 'wed_sep_27'
+'-28' = 'thu_sep_28'
+'-29' = 'fri_sep_29'
+# No group for Sept 30th
+#'Group 1' = 'new_group36'
