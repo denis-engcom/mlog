@@ -20,6 +20,7 @@ func NewMondayAPIClient(apiAccessToken, loggingUserID, personColumnID, hoursColu
 	client := graphql.NewClient("https://api.monday.com/v2/", nil).
 		WithRequestModifier(func(req *http.Request) {
 			req.Header.Add("Authorization", apiAccessToken)
+			req.Header.Add("API-Version", "2023-10")
 		})
 	return &MondayAPIClient{
 		client:         client,
@@ -47,9 +48,10 @@ type GetBoardsQuery struct {
 }
 
 // GetBoardByID calls the Monday API "boards" query with a single board and returns it.
-func (m *MondayAPIClient) GetBoardByID(boardID int) (*Board, error) {
+func (m *MondayAPIClient) GetBoardByID(boardID string) (*Board, error) {
+	bid := graphql.NewID(boardID)
 	vars := map[string]interface{}{
-		"board_ids": []int{boardID},
+		"board_ids": []graphql.ID{*bid},
 	}
 	var gbq GetBoardsQuery
 	err := m.client.Query(context.TODO(), &gbq, vars)
@@ -58,6 +60,52 @@ func (m *MondayAPIClient) GetBoardByID(boardID int) (*Board, error) {
 			"A problem occurred when contacting monday.com. Exiting.")
 	}
 	return &gbq.Boards[0], nil
+}
+
+//	query {
+//	  items_page_by_column_values(limit: 50, board_id: "board-id", columns: [{column_id: "person-column", column_values: ["logging-user-id"]}]) {
+//	    cursor
+//	    items {
+//	      id
+//	      name
+//	      group { title }
+//	      column_values(ids: "hours-column") { text }
+//	    }
+//	  }
+//	}
+type ItemResponse struct {
+	Cursor string
+	Items  []struct {
+		ID    string
+		Name  string
+		Group struct {
+			Title string
+		}
+		Column_Values []struct {
+			Text string
+		} `graphql:"column_values(ids: $hours_column_id)"`
+	}
+}
+
+type GetItemsQuery struct {
+	IR *ItemResponse `graphql:"items_page_by_column_values(limit: 200, board_id: $board_id, columns: [{column_id: $person_column_id, column_values: $logging_user_id}])"`
+}
+
+// GetItems calls the Monday API "items_page_by_column_values" query and returns the logging user's items.
+func (m *MondayAPIClient) GetItems(boardID string, loggingUserID string, personColumnID string, hoursColumnID string) (*ItemResponse, error) {
+	vars := map[string]interface{}{
+		"board_id":         graphql.ToID(boardID),
+		"logging_user_id":  []string{loggingUserID},
+		"hours_column_id":  []string{hoursColumnID},
+		"person_column_id": personColumnID,
+	}
+	var giq GetItemsQuery
+	err := m.client.Query(context.TODO(), &giq, vars)
+	if err != nil {
+		return nil, WrapWithStackF(err,
+			"A problem occurred when contacting monday.com. Exiting.")
+	}
+	return giq.IR, nil
 }
 
 // JSONEncodedString avoids a type mismatch in the GraphQL library when setting a JSON-encoded string property.

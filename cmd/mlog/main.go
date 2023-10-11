@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"github.com/cheynewallace/tabby"
 	"io"
 	// "log"
 	"net/http"
@@ -62,10 +63,6 @@ func main() {
 			&cli.BoolFlag{Name: "debug", Aliases: []string{"d"}},
 		},
 		Commands: cli.Commands{
-			// TODO New route to query items
-			// mlog get-items 2023-09
-			// mlog get-items 2023-09-01
-			// Display using https://github.com/cheynewallace/tabby
 			// TODO New route to query item link
 			// mlog get-link 5244659133
 			// "https://magicboard.monday.com" + relative_link
@@ -106,24 +103,24 @@ func main() {
 
 					monthYYYYMM := dayYYYYMMDD[0:7]
 					if len(boardsConf.Months) == 0 {
-						return WithStackF("\"months.%s.board_id\": not found in boards configuration. Exiting.", monthYYYYMM)
+						return WithStackF(msgMonthBoardIDNotFound, monthYYYYMM)
 					}
 					month := boardsConf.Months[monthYYYYMM]
 					if month == nil || month.BoardID == "" {
-						return WithStackF("\"months.%s.board_id\": not found in boards configuration. Exiting.", monthYYYYMM)
+						return WithStackF(msgMonthBoardIDNotFound, monthYYYYMM)
 					}
 					boardIDInt, err := strconv.Atoi(month.BoardID)
 					if err != nil {
-						return WithStackF("\"months.%s.board_id\": not a number. Exiting.", monthYYYYMM)
+						return WrapWithStackF(err, "\"months.%s.board_id\": not a number. Exiting.", monthYYYYMM)
 					}
 
 					dayDD := dayYYYYMMDD[7:10]
 					if len(month.Days) == 0 {
-						return WithStackF("\"month.%s.days.%s\": not found in boards configuration. Exiting.", monthYYYYMM, dayDD)
+						return WithStackF(msgDayGroupNotFound, monthYYYYMM, dayDD)
 					}
 					dayGroupID := month.Days[dayDD]
 					if dayGroupID == "" {
-						return WithStackF("\"month.%s.days.%s\": not found in boards configuration. Exiting.", monthYYYYMM, dayDD)
+						return WithStackF(msgDayGroupNotFound, monthYYYYMM, dayDD)
 					}
 					logger.Debugw("createOne", "day", dayYYYYMMDD, "boardID", boardIDInt, "groupID", dayGroupID, "itemName", itemName, "hours", hours)
 
@@ -155,6 +152,47 @@ func main() {
 					return getBoardByID(mondayAPIClient, cCtx.Args().First())
 				},
 			},
+			{
+				Name:        "get-items",
+				Aliases:     []string{"gi"},
+				ArgsUsage:   "<yyyy-mm>",
+				Description: "Get the logging user's items from the given month's board",
+				Action: func(cCtx *cli.Context) error {
+					// TODO Day version of this route
+					// mlog get-items 2023-09-01
+					userConf, boardsConf, err := loadConf()
+					if err != nil {
+						return err
+					}
+
+					mondayAPIClient := NewMondayAPIClient(
+						userConf.APIAccessToken,
+						userConf.LoggingUserID,
+						boardsConf.PersonColumnID,
+						boardsConf.HoursColumnID)
+
+					monthYYYYMM := cCtx.Args().First()
+					month := boardsConf.Months[monthYYYYMM]
+					if month == nil || month.BoardID == "" {
+						return WithStackF(msgMonthBoardIDNotFound, monthYYYYMM)
+					}
+
+					logger.Debugw("getItems", "boardID", month.BoardID, "loggingUserID", userConf.LoggingUserID, "personColumnID", boardsConf.PersonColumnID, "hoursColumnID", boardsConf.HoursColumnID)
+					items, err := mondayAPIClient.GetItems(month.BoardID, userConf.LoggingUserID, boardsConf.PersonColumnID, boardsConf.HoursColumnID)
+					if err != nil {
+						return err
+					}
+
+					//return json.NewEncoder(os.Stdout).Encode(items.Items)
+					table := tabby.New()
+					table.AddHeader("GROUP", "HOURS", "DESCRIPTION", "PULSE ID")
+					for _, item := range items.Items {
+						table.AddLine(item.Group.Title, item.Column_Values[0].Text, item.Name, item.ID)
+					}
+					table.Print()
+					return nil
+				},
+			},
 		},
 		// Adapt error handling to...
 		// * printing stack traces during debug mode
@@ -180,8 +218,12 @@ func main() {
 	app.Run(os.Args)
 }
 
-var unableToParseUserConfMsg = "Unable to parse user configuration file.\nRun `mlog setup` for error details."
-var unableToParseBoardsConfMsg = "Unable to parse boards configuration file.\nRun `mlog setup` for error details."
+var (
+	msgMonthBoardIDNotFound    = "\"months.%s.board_id\": not found in boards configuration. Exiting."
+	msgDayGroupNotFound        = "\"month.%s.days.%s\": not found in boards configuration. Exiting."
+	msgUnableToParseUserConf   = "Unable to parse user configuration file.\nRun `mlog setup` for error details."
+	msgUnableToParseBoardsConf = "Unable to parse boards configuration file.\nRun `mlog setup` for error details."
+)
 
 func loadConf() (*UserConf, *BoardsConf, error) {
 	err := loadConfPaths()
@@ -192,19 +234,19 @@ func loadConf() (*UserConf, *BoardsConf, error) {
 	var userConf UserConf
 	err = loadTOML(userConfFilePath, &userConf)
 	if err != nil {
-		return nil, nil, WrapWithStack(err, unableToParseUserConfMsg)
+		return nil, nil, WrapWithStack(err, msgUnableToParseUserConf)
 	}
 	if userConf.APIAccessToken == "" || userConf.LoggingUserID == "" {
-		return nil, nil, WrapWithStack(err, unableToParseUserConfMsg)
+		return nil, nil, WrapWithStack(err, msgUnableToParseUserConf)
 	}
 
 	var boardsConf BoardsConf
 	err = loadTOML(boardsConfFilePath, &boardsConf)
 	if err != nil {
-		return nil, nil, WrapWithStack(err, unableToParseBoardsConfMsg)
+		return nil, nil, WrapWithStack(err, msgUnableToParseBoardsConf)
 	}
 	if boardsConf.PersonColumnID == "" || boardsConf.HoursColumnID == "" {
-		return nil, nil, WrapWithStack(err, unableToParseBoardsConfMsg)
+		return nil, nil, WrapWithStack(err, msgUnableToParseBoardsConf)
 	}
 
 	return &userConf, &boardsConf, nil
@@ -355,11 +397,7 @@ func update(cCtx *cli.Context) error {
 
 func getBoardByID(mondayAPIClient *MondayAPIClient, boardID string) error {
 	logger.Debugw("getBoardByID", "boardID", boardID)
-	boardIDInt, err := strconv.Atoi(boardID)
-	if err != nil {
-		return WithStackF("\"%d\": not a number. Exiting.", boardID)
-	}
-	board, err := mondayAPIClient.GetBoardByID(boardIDInt)
+	board, err := mondayAPIClient.GetBoardByID(boardID)
 	if err != nil {
 		return err
 	}

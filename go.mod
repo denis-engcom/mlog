@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/adrg/xdg v0.4.0
+	github.com/cheynewallace/tabby v1.1.1
 	github.com/go-errors/errors v1.5.1
 	github.com/hasura/go-graphql-client v0.9.3
 	github.com/pelletier/go-toml/v2 v2.1.0
