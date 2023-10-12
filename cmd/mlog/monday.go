@@ -20,6 +20,7 @@ func NewMondayAPIClient(apiAccessToken, loggingUserID, personColumnID, hoursColu
 	client := graphql.NewClient("https://api.monday.com/v2/", nil).
 		WithRequestModifier(func(req *http.Request) {
 			req.Header.Add("Authorization", apiAccessToken)
+			// The latest version of the Monday API won't be used by default until January 2024.
 			req.Header.Add("API-Version", "2023-10")
 		})
 	return &MondayAPIClient{
@@ -49,9 +50,8 @@ type GetBoardsQuery struct {
 
 // GetBoardByID calls the Monday API "boards" query with a single board and returns it.
 func (m *MondayAPIClient) GetBoardByID(boardID string) (*Board, error) {
-	bid := graphql.NewID(boardID)
-	vars := map[string]interface{}{
-		"board_ids": []graphql.ID{*bid},
+	vars := map[string]any{
+		"board_ids": []graphql.ID{graphql.ToID(boardID)},
 	}
 	var gbq GetBoardsQuery
 	err := m.client.Query(context.TODO(), &gbq, vars)
@@ -93,7 +93,7 @@ type GetItemsQuery struct {
 
 // GetItems calls the Monday API "items_page_by_column_values" query and returns the logging user's items.
 func (m *MondayAPIClient) GetItems(boardID string, loggingUserID string, personColumnID string, hoursColumnID string) (*ItemResponse, error) {
-	vars := map[string]interface{}{
+	vars := map[string]any{
 		"board_id":         graphql.ToID(boardID),
 		"logging_user_id":  []string{loggingUserID},
 		"hours_column_id":  []string{hoursColumnID},
@@ -129,7 +129,7 @@ func (m *MondayAPIClient) CreateLogItem(boardID int, groupID, itemName, hours st
 	// Person and Hours key-value pairs have to be provided together as a JSON-encoded string property.
 	columnValues := fmt.Sprintf(`{"%s":"%s","%s":%s}`, m.personColumnID, m.loggingUserID, m.hoursColumnID, hours)
 
-	vars := map[string]interface{}{
+	vars := map[string]any{
 		"board_id":      boardID,
 		"group_id":      groupID,
 		"item_name":     itemName,
@@ -142,4 +142,30 @@ func (m *MondayAPIClient) CreateLogItem(boardID int, groupID, itemName, hours st
 			"A problem occurred when contacting monday.com. Please verify on monday.com whether a log entry was created or not. Exiting.")
 	}
 	return &update, nil
+}
+
+//	query {
+//		items(ids: [5244659133]) {
+//			relative_link
+//		}
+//	}
+type PulseRelativeLink struct {
+	Relative_Link string
+}
+
+type GetPulseRelativeLinkQuery struct {
+	PRL []PulseRelativeLink `graphql:"items(ids: $pulse_ids)"`
+}
+
+func (m *MondayAPIClient) GetPulseRelativeLink(pulseID string) (*PulseRelativeLink, error) {
+	vars := map[string]any{
+		"pulse_ids": []graphql.ID{graphql.ToID(pulseID)},
+	}
+	var gprlq GetPulseRelativeLinkQuery
+	err := m.client.Query(context.TODO(), &gprlq, vars)
+	if err != nil {
+		return nil, WrapWithStackF(err,
+			"A problem occurred when contacting monday.com. Exiting.")
+	}
+	return &gprlq.PRL[0], nil
 }

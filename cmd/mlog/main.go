@@ -69,129 +69,41 @@ func main() {
 			{
 				Name:        "setup",
 				Description: "Setup configuration files needed by the other mlog commands",
-				Action:      setup,
+				Action:      cliSetup,
 			},
 			{
 				Name:        "update",
 				Aliases:     []string{"u"},
 				Description: "Fetch the latest boards.toml configuration",
-				Action:      update,
+				Action:      cliUpdate,
 			},
 			{
 				Name:        "create-one",
 				Aliases:     []string{"co"},
 				ArgsUsage:   "<yyyy-mm-dd> <item-description> <hours>",
 				Description: "Create one log entry with info provided on the command line",
-				Action: func(cCtx *cli.Context) error {
-					userConf, boardsConf, err := loadConf()
-					if err != nil {
-						return err
-					}
-
-					mondayAPIClient := NewMondayAPIClient(
-						userConf.APIAccessToken,
-						userConf.LoggingUserID,
-						boardsConf.PersonColumnID,
-						boardsConf.HoursColumnID)
-
-					args := cCtx.Args()
-					dayYYYYMMDD, itemName, hours := args.Get(0), args.Get(1), args.Get(2)
-
-					if len(dayYYYYMMDD) != 10 {
-						return WithStackF("%q: provided day is not in format yyyy-mm-dd. Exiting.", dayYYYYMMDD)
-					}
-
-					monthYYYYMM := dayYYYYMMDD[0:7]
-					if len(boardsConf.Months) == 0 {
-						return WithStackF(msgMonthBoardIDNotFound, monthYYYYMM)
-					}
-					month := boardsConf.Months[monthYYYYMM]
-					if month == nil || month.BoardID == "" {
-						return WithStackF(msgMonthBoardIDNotFound, monthYYYYMM)
-					}
-					boardIDInt, err := strconv.Atoi(month.BoardID)
-					if err != nil {
-						return WrapWithStackF(err, "\"months.%s.board_id\": not a number. Exiting.", monthYYYYMM)
-					}
-
-					dayDD := dayYYYYMMDD[7:10]
-					if len(month.Days) == 0 {
-						return WithStackF(msgDayGroupNotFound, monthYYYYMM, dayDD)
-					}
-					dayGroupID := month.Days[dayDD]
-					if dayGroupID == "" {
-						return WithStackF(msgDayGroupNotFound, monthYYYYMM, dayDD)
-					}
-					logger.Debugw("createOne", "day", dayYYYYMMDD, "boardID", boardIDInt, "groupID", dayGroupID, "itemName", itemName, "hours", hours)
-
-					res, err := mondayAPIClient.CreateLogItem(boardIDInt, dayGroupID, itemName, hours)
-					if err != nil {
-						return err
-					}
-					fmt.Printf("https://magicboard.monday.com%s\n", res.Create_Item.Relative_Link)
-					return nil
-				},
+				Action:      cliCreateOne,
 			},
 			{
 				Name:        "get-board-by-id",
 				Aliases:     []string{"gbid"},
 				ArgsUsage:   "<board-id>",
 				Description: "(Admin command) get board information by board-id to populate boards.toml",
-				Action: func(cCtx *cli.Context) error {
-					userConf, boardsConf, err := loadConf()
-					if err != nil {
-						return err
-					}
-
-					mondayAPIClient := NewMondayAPIClient(
-						userConf.APIAccessToken,
-						userConf.LoggingUserID,
-						boardsConf.PersonColumnID,
-						boardsConf.HoursColumnID)
-
-					return getBoardByID(mondayAPIClient, cCtx.Args().First())
-				},
+				Action:      cliGetBoardByID,
 			},
 			{
 				Name:        "get-items",
 				Aliases:     []string{"gi"},
 				ArgsUsage:   "<yyyy-mm>",
 				Description: "Get the logging user's items from the given month's board",
-				Action: func(cCtx *cli.Context) error {
-					// TODO Day version of this route
-					// mlog get-items 2023-09-01
-					userConf, boardsConf, err := loadConf()
-					if err != nil {
-						return err
-					}
-
-					mondayAPIClient := NewMondayAPIClient(
-						userConf.APIAccessToken,
-						userConf.LoggingUserID,
-						boardsConf.PersonColumnID,
-						boardsConf.HoursColumnID)
-
-					monthYYYYMM := cCtx.Args().First()
-					month := boardsConf.Months[monthYYYYMM]
-					if month == nil || month.BoardID == "" {
-						return WithStackF(msgMonthBoardIDNotFound, monthYYYYMM)
-					}
-
-					logger.Debugw("getItems", "boardID", month.BoardID, "loggingUserID", userConf.LoggingUserID, "personColumnID", boardsConf.PersonColumnID, "hoursColumnID", boardsConf.HoursColumnID)
-					items, err := mondayAPIClient.GetItems(month.BoardID, userConf.LoggingUserID, boardsConf.PersonColumnID, boardsConf.HoursColumnID)
-					if err != nil {
-						return err
-					}
-
-					//return json.NewEncoder(os.Stdout).Encode(items.Items)
-					table := tabby.New()
-					table.AddHeader("GROUP", "HOURS", "DESCRIPTION", "PULSE ID")
-					for _, item := range items.Items {
-						table.AddLine(item.Group.Title, item.Column_Values[0].Text, item.Name, item.ID)
-					}
-					table.Print()
-					return nil
-				},
+				Action:      cliGetItems,
+			},
+			{
+				Name:        "pulse-link",
+				Aliases:     []string{"pl"},
+				ArgsUsage:   "<pulse-id>",
+				Description: "Open the pulse in your browser",
+				Action:      cliPulseLink,
 			},
 		},
 		// Adapt error handling to...
@@ -274,7 +186,7 @@ func loadTOML(path string, obj any) error {
 	return ptoml.NewDecoder(file).Decode(obj)
 }
 
-func setup(cCtx *cli.Context) error {
+func cliSetup(cCtx *cli.Context) error {
 	err := loadConfPaths()
 	if err != nil {
 		return err
@@ -349,7 +261,7 @@ func setup(cCtx *cli.Context) error {
 }
 
 // TODO Detect when you are already up to date.
-func update(cCtx *cli.Context) error {
+func cliUpdate(cCtx *cli.Context) error {
 	err := loadConfPaths()
 	if err != nil {
 		return err
@@ -395,6 +307,71 @@ func update(cCtx *cli.Context) error {
 	return nil
 }
 
+func cliCreateOne(cCtx *cli.Context) error {
+	userConf, boardsConf, err := loadConf()
+	if err != nil {
+		return err
+	}
+
+	mondayAPIClient := NewMondayAPIClient(
+		userConf.APIAccessToken,
+		userConf.LoggingUserID,
+		boardsConf.PersonColumnID,
+		boardsConf.HoursColumnID)
+
+	args := cCtx.Args()
+	dayYYYYMMDD, itemName, hours := args.Get(0), args.Get(1), args.Get(2)
+
+	if len(dayYYYYMMDD) != 10 {
+		return WithStackF("%q: provided day is not in format yyyy-mm-dd. Exiting.", dayYYYYMMDD)
+	}
+
+	monthYYYYMM := dayYYYYMMDD[0:7]
+	if len(boardsConf.Months) == 0 {
+		return WithStackF(msgMonthBoardIDNotFound, monthYYYYMM)
+	}
+	month := boardsConf.Months[monthYYYYMM]
+	if month == nil || month.BoardID == "" {
+		return WithStackF(msgMonthBoardIDNotFound, monthYYYYMM)
+	}
+	boardIDInt, err := strconv.Atoi(month.BoardID)
+	if err != nil {
+		return WrapWithStackF(err, "\"months.%s.board_id\": not a number. Exiting.", monthYYYYMM)
+	}
+
+	dayDD := dayYYYYMMDD[7:10]
+	if len(month.Days) == 0 {
+		return WithStackF(msgDayGroupNotFound, monthYYYYMM, dayDD)
+	}
+	dayGroupID := month.Days[dayDD]
+	if dayGroupID == "" {
+		return WithStackF(msgDayGroupNotFound, monthYYYYMM, dayDD)
+	}
+	logger.Debugw("createOne", "day", dayYYYYMMDD, "boardID", boardIDInt, "groupID", dayGroupID, "itemName", itemName, "hours", hours)
+
+	res, err := mondayAPIClient.CreateLogItem(boardIDInt, dayGroupID, itemName, hours)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("https://magicboard.monday.com%s\n", res.Create_Item.Relative_Link)
+	return nil
+}
+
+func cliGetBoardByID(cCtx *cli.Context) error {
+	userConf, boardsConf, err := loadConf()
+	if err != nil {
+		return err
+	}
+
+	mondayAPIClient := NewMondayAPIClient(
+		userConf.APIAccessToken,
+		userConf.LoggingUserID,
+		boardsConf.PersonColumnID,
+		boardsConf.HoursColumnID)
+
+	return getBoardByID(mondayAPIClient, cCtx.Args().First())
+}
+
 func getBoardByID(mondayAPIClient *MondayAPIClient, boardID string) error {
 	logger.Debugw("getBoardByID", "boardID", boardID)
 	board, err := mondayAPIClient.GetBoardByID(boardID)
@@ -424,4 +401,64 @@ func getBoardByID(mondayAPIClient *MondayAPIClient, boardID string) error {
 		},
 	}
 	return ptoml.NewEncoder(os.Stdout).Encode(&content)
+}
+
+func cliGetItems(cCtx *cli.Context) error {
+	// TODO Day version of this route
+	// mlog get-items 2023-09-01
+	userConf, boardsConf, err := loadConf()
+	if err != nil {
+		return err
+	}
+
+	mondayAPIClient := NewMondayAPIClient(
+		userConf.APIAccessToken,
+		userConf.LoggingUserID,
+		boardsConf.PersonColumnID,
+		boardsConf.HoursColumnID)
+
+	monthYYYYMM := cCtx.Args().First()
+	month := boardsConf.Months[monthYYYYMM]
+	if month == nil || month.BoardID == "" {
+		return WithStackF(msgMonthBoardIDNotFound, monthYYYYMM)
+	}
+
+	logger.Debugw("getItems", "boardID", month.BoardID, "loggingUserID", userConf.LoggingUserID, "personColumnID", boardsConf.PersonColumnID, "hoursColumnID", boardsConf.HoursColumnID)
+	items, err := mondayAPIClient.GetItems(month.BoardID, userConf.LoggingUserID, boardsConf.PersonColumnID, boardsConf.HoursColumnID)
+	if err != nil {
+		return err
+	}
+
+	//return json.NewEncoder(os.Stdout).Encode(items.Items)
+	table := tabby.New()
+	table.AddHeader("GROUP", "HOURS", "DESCRIPTION", "PULSE ID")
+	for _, item := range items.Items {
+		table.AddLine(item.Group.Title, item.Column_Values[0].Text, item.Name, item.ID)
+	}
+	table.Print()
+	return nil
+}
+
+func cliPulseLink(cCtx *cli.Context) error {
+	userConf, boardsConf, err := loadConf()
+	if err != nil {
+		return err
+	}
+
+	mondayAPIClient := NewMondayAPIClient(
+		userConf.APIAccessToken,
+		userConf.LoggingUserID,
+		boardsConf.PersonColumnID,
+		boardsConf.HoursColumnID)
+
+	pulseID := cCtx.Args().First()
+
+	logger.Debugw("openPulse", "pulseID", pulseID)
+	prl, err := mondayAPIClient.GetPulseRelativeLink(pulseID)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("https://magicboard.monday.com%s\n", prl.Relative_Link)
+	return nil
 }
