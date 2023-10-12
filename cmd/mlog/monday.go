@@ -83,21 +83,23 @@ func (_ CompareValue) GetGraphQLType() string { return "CompareValue" }
 //	    }
 //	  }
 //	}
+type BoardItem struct {
+	ID    string
+	Name  string
+	Group struct {
+		Title string
+	}
+	Column_Values []struct {
+		Text string
+	} `graphql:"column_values(ids: $hours_column_id)"`
+}
+
 type BoardWithItems struct {
 	ID         string
 	Name       string
 	Items_Page struct {
 		Cursor string
-		Items  []struct {
-			ID    string
-			Name  string
-			Group struct {
-				Title string
-			}
-			Column_Values []struct {
-				Text string
-			} `graphql:"column_values(ids: $hours_column_id)"`
-		}
+		Items  []BoardItem
 	} `graphql:"items_page(limit: 100, query_params: { rules: { column_id: $person_column_id, compare_value: $logging_user_id} })"`
 }
 
@@ -106,12 +108,12 @@ type GetBoardItemsQuery struct {
 }
 
 // GetBoardItems calls the Monday API "boards" query and returns the logging user's items.
-func (m *MondayAPIClient) GetBoardItems(boardID string, loggingUserID string, personColumnID string, hoursColumnID string) (*BoardWithItems, error) {
+func (m *MondayAPIClient) GetBoardItems(boardID string) (*BoardWithItems, error) {
 	vars := map[string]any{
 		"board_ids":        []graphql.ID{graphql.ToID(boardID)},
-		"logging_user_id":  CompareValue("person-" + loggingUserID),
-		"hours_column_id":  []string{hoursColumnID},
-		"person_column_id": graphql.ToID(personColumnID),
+		"logging_user_id":  CompareValue("person-" + m.loggingUserID),
+		"hours_column_id":  []string{m.hoursColumnID},
+		"person_column_id": graphql.ToID(m.personColumnID),
 	}
 	var gbiq GetBoardItemsQuery
 	err := m.client.Query(context.TODO(), &gbiq, vars)
@@ -138,7 +140,7 @@ func (m *MondayAPIClient) CreateLogItem(boardID int, groupID, itemName, hours st
 	// Validating it's a float, but can still make direct use of the string value in the request.
 	_, err := strconv.ParseFloat(hours, 64)
 	if err != nil {
-		return nil, WrapWithStackF(err, "%q: unable to parse hours as a number. Exiting.", hours)
+		return nil, WrapWithStackF(err, "hours = %s (third arg): unable to parse hours as a number. Exiting.", hours)
 	}
 	// Person and Hours key-value pairs have to be provided together as a JSON-encoded string property.
 	columnValues := fmt.Sprintf(`{"%s":"%s","%s":%s}`, m.personColumnID, m.loggingUserID, m.hoursColumnID, hours)

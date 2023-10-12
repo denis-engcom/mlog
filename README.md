@@ -84,3 +84,7 @@ Drive pulse creation from config (TOML or CSV)...
 # For every log to be created, show information to user, and prompt for confirmation
 ➜ mlog create-all april-2023.toml
 ```
+
+## Important links
+
+[Monday API 2023-10 release notes](https://developer.monday.com/api-reference/docs/release-notes?lid=iur3fqsd7acz#2023-10)

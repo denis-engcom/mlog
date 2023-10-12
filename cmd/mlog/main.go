@@ -1,21 +1,22 @@
 package main
 
 import (
+	"cmp"
 	_ "embed"
 	"fmt"
-	"github.com/cheynewallace/tabby"
 	"io"
 	// "log"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 
-	"github.com/urfave/cli/v2"
-	"go.uber.org/zap"
-
 	"github.com/adrg/xdg"
+	"github.com/cheynewallace/tabby"
 	"github.com/go-errors/errors"
 	"github.com/pelletier/go-toml/v2"
+	"github.com/urfave/cli/v2"
+	"go.uber.org/zap"
 )
 
 var (
@@ -63,9 +64,6 @@ func main() {
 			&cli.BoolFlag{Name: "debug", Aliases: []string{"d"}},
 		},
 		Commands: cli.Commands{
-			// TODO New route to query item link
-			// mlog get-link 5244659133
-			// "https://magicboard.monday.com" + relative_link
 			{
 				Name:        "setup",
 				Description: "Setup configuration files needed by the other mlog commands",
@@ -97,6 +95,13 @@ func main() {
 				ArgsUsage:   "<yyyy-mm>",
 				Description: "Get the logging user's items from the given month's board",
 				Action:      cliGetBoardItems,
+			},
+			{
+				Name:        "get-board-item-summary",
+				Aliases:     []string{"gbis"},
+				ArgsUsage:   "<yyyy-mm>",
+				Description: "Get the logging user's item summary from the given month's board",
+				Action:      cliGetBoardItemSummary,
 			},
 			{
 				Name:        "pulse-link",
@@ -186,6 +191,17 @@ func loadTOML(path string, obj any) error {
 	return toml.NewDecoder(file).Decode(obj)
 }
 
+// TODO Improve setup by
+//  1. asking for access token
+//  2. Calling the "me" API to get the "logging user ID"
+
+//	query {
+//		me {
+//	 		id
+//	 		name
+//	 		url
+//		}
+//	}
 func cliSetup(cCtx *cli.Context) error {
 	err := loadConfPaths()
 	if err != nil {
@@ -323,7 +339,7 @@ func cliCreateOne(cCtx *cli.Context) error {
 	dayYYYYMMDD, itemName, hours := args.Get(0), args.Get(1), args.Get(2)
 
 	if len(dayYYYYMMDD) != 10 {
-		return WithStackF("%q: provided day is not in format yyyy-mm-dd. Exiting.", dayYYYYMMDD)
+		return WithStackF("day = %s (first arg): provided day is not in format yyyy-mm-dd. Exiting.", dayYYYYMMDD)
 	}
 
 	monthYYYYMM := dayYYYYMMDD[0:7]
@@ -347,7 +363,7 @@ func cliCreateOne(cCtx *cli.Context) error {
 	if dayGroupID == "" {
 		return WithStackF(msgDayGroupNotFound, monthYYYYMM, dayDD)
 	}
-	logger.Debugw("createOne", "day", dayYYYYMMDD, "boardID", boardIDInt, "groupID", dayGroupID, "itemName", itemName, "hours", hours)
+	logger.Debugw("CreateLogItem", "day", dayYYYYMMDD, "boardID", boardIDInt, "groupID", dayGroupID, "itemName", itemName, "hours", hours)
 
 	res, err := mondayAPIClient.CreateLogItem(boardIDInt, dayGroupID, itemName, hours)
 	if err != nil {
@@ -373,7 +389,7 @@ func cliGetBoardByID(cCtx *cli.Context) error {
 }
 
 func getBoardByID(mondayAPIClient *MondayAPIClient, boardID string) error {
-	logger.Debugw("getBoardByID", "boardID", boardID)
+	logger.Debugw("GetBoardByID", "boardID", boardID)
 	board, err := mondayAPIClient.GetBoardByID(boardID)
 	if err != nil {
 		return err
@@ -405,7 +421,8 @@ func getBoardByID(mondayAPIClient *MondayAPIClient, boardID string) error {
 
 func cliGetBoardItems(cCtx *cli.Context) error {
 	// TODO Day version of this route
-	// mlog get-items 2023-09-01
+	// mlog get-board-items 2023-09-01
+	// For now, rely on grepping of group names
 	userConf, boardsConf, err := loadConf()
 	if err != nil {
 		return err
@@ -423,17 +440,113 @@ func cliGetBoardItems(cCtx *cli.Context) error {
 		return WithStackF(msgMonthBoardIDNotFound, monthYYYYMM)
 	}
 
-	logger.Debugw("getItems", "boardID", month.BoardID, "loggingUserID", userConf.LoggingUserID, "personColumnID", boardsConf.PersonColumnID, "hoursColumnID", boardsConf.HoursColumnID)
-	boardWithItems, err := mondayAPIClient.GetBoardItems(month.BoardID, userConf.LoggingUserID, boardsConf.PersonColumnID, boardsConf.HoursColumnID)
+	logger.Debugw("GetBoardItems", "boardID", month.BoardID)
+	boardWithItems, err := mondayAPIClient.GetBoardItems(month.BoardID)
 	if err != nil {
 		return err
 	}
+
+	items := boardWithItems.Items_Page.Items
+	slices.SortFunc(items, func(a, b BoardItem) int {
+		aGroup := a.Group.Title
+		bGroup := b.Group.Title
+		if len(aGroup) == 10 && len(bGroup) == 10 {
+			if aGroup[8] > bGroup[8] {
+				return 1
+			} else if aGroup[8] < bGroup[8] {
+				return -1
+			}
+			if aGroup[9] > bGroup[9] {
+				return 1
+			} else if aGroup[9] < bGroup[9] {
+				return -1
+			}
+		}
+
+		return cmp.Compare(a.ID, b.ID)
+	})
 
 	//return json.NewEncoder(os.Stdout).Encode(items.Items)
 	table := tabby.New()
 	table.AddHeader("GROUP", "HOURS", "DESCRIPTION", "PULSE ID")
 	for _, item := range boardWithItems.Items_Page.Items {
 		table.AddLine(item.Group.Title, item.Column_Values[0].Text, item.Name, item.ID)
+	}
+	table.Print()
+	return nil
+}
+
+func cliGetBoardItemSummary(cCtx *cli.Context) error {
+	userConf, boardsConf, err := loadConf()
+	if err != nil {
+		return err
+	}
+
+	mondayAPIClient := NewMondayAPIClient(
+		userConf.APIAccessToken,
+		userConf.LoggingUserID,
+		boardsConf.PersonColumnID,
+		boardsConf.HoursColumnID)
+
+	monthYYYYMM := cCtx.Args().First()
+	month := boardsConf.Months[monthYYYYMM]
+	if month == nil || month.BoardID == "" {
+		return WithStackF(msgMonthBoardIDNotFound, monthYYYYMM)
+	}
+
+	logger.Debugw("GetBoardItems", "boardID", month.BoardID)
+	boardWithItems, err := mondayAPIClient.GetBoardItems(month.BoardID)
+	if err != nil {
+		return err
+	}
+
+	type GroupData struct {
+		Group      string
+		TotalHours float64
+		PulseCount int
+	}
+	groupMap := map[string]GroupData{}
+	for _, item := range boardWithItems.Items_Page.Items {
+		hours, err := strconv.ParseFloat(item.Column_Values[0].Text, 64)
+		if err != nil {
+			return WrapWithStackF(err, "hours = %s (pulse_id = %s): not a number. Exiting.",
+				item.Column_Values[0].Text,
+				item.ID)
+		}
+		gd := groupMap[item.Group.Title]
+		gd.TotalHours += hours
+		gd.PulseCount += 1
+		groupMap[item.Group.Title] = gd
+	}
+	groups := make([]GroupData, 0, len(groupMap))
+	for gKey, gVal := range groupMap {
+		gVal.Group = gKey
+		groups = append(groups, gVal)
+	}
+
+	slices.SortFunc(groups, func(a, b GroupData) int {
+		aGroup := a.Group
+		bGroup := b.Group
+		if len(aGroup) == 10 && len(bGroup) == 10 {
+			if aGroup[8] > bGroup[8] {
+				return 1
+			} else if aGroup[8] < bGroup[8] {
+				return -1
+			}
+			if aGroup[9] > bGroup[9] {
+				return 1
+			} else if aGroup[9] < bGroup[9] {
+				return -1
+			}
+		}
+
+		return cmp.Compare(aGroup, bGroup)
+	})
+
+	table := tabby.New()
+	table.AddHeader("GROUP", "TOTAL HOURS", "PULSE COUNT")
+	for _, group := range groups {
+		table.AddLine(group.Group, group.TotalHours, group.PulseCount)
 	}
 	table.Print()
 	return nil
@@ -453,7 +566,7 @@ func cliPulseLink(cCtx *cli.Context) error {
 
 	pulseID := cCtx.Args().First()
 
-	logger.Debugw("openPulse", "pulseID", pulseID)
+	logger.Debugw("GetPulseRelativeLink", "pulseID", pulseID)
 	prl, err := mondayAPIClient.GetPulseRelativeLink(pulseID)
 	if err != nil {
 		return err
