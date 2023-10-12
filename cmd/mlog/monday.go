@@ -18,6 +18,7 @@ type MondayAPIClient struct {
 // NewMondayAPIClient forms the client with common information needed during Monday API calls.
 func NewMondayAPIClient(apiAccessToken, loggingUserID, personColumnID, hoursColumnID string) *MondayAPIClient {
 	client := graphql.NewClient("https://api.monday.com/v2/", nil).
+		//WithDebug(true).
 		WithRequestModifier(func(req *http.Request) {
 			req.Header.Add("Authorization", apiAccessToken)
 			// The latest version of the Monday API won't be used by default until January 2024.
@@ -62,50 +63,63 @@ func (m *MondayAPIClient) GetBoardByID(boardID string) (*Board, error) {
 	return &gbq.Boards[0], nil
 }
 
+// CompareValue avoids a type mismatch in the GraphQL library when setting a string meant for type CompareValue.
+type CompareValue string
+
+func (_ CompareValue) GetGraphQLType() string { return "CompareValue" }
+
 //	query {
-//	  items_page_by_column_values(limit: 50, board_id: "board-id", columns: [{column_id: "person-column", column_values: ["logging-user-id"]}]) {
-//	    cursor
-//	    items {
-//	      id
-//	      name
-//	      group { title }
-//	      column_values(ids: "hours-column") { text }
+//	  boards(ids: 5064273451) {
+//	    id
+//	    name
+//	    items_page(limit: 100, query_params: {rules: [{column_id: "person-column", compare_value: ["person-" + "logging-user-id"]}]}) {
+//	      cursor
+//	      items {
+//	        id
+//	        name
+//	        group { title }
+//	        column_values(ids: "hours-column") { text }
+//	      }
 //	    }
 //	  }
 //	}
-type ItemResponse struct {
-	Cursor string
-	Items  []struct {
-		ID    string
-		Name  string
-		Group struct {
-			Title string
+type BoardWithItems struct {
+	ID         string
+	Name       string
+	Items_Page struct {
+		Cursor string
+		Items  []struct {
+			ID    string
+			Name  string
+			Group struct {
+				Title string
+			}
+			Column_Values []struct {
+				Text string
+			} `graphql:"column_values(ids: $hours_column_id)"`
 		}
-		Column_Values []struct {
-			Text string
-		} `graphql:"column_values(ids: $hours_column_id)"`
-	}
+	} `graphql:"items_page(limit: 100, query_params: { rules: { column_id: $person_column_id, compare_value: $logging_user_id} })"`
 }
 
-type GetItemsQuery struct {
-	IR *ItemResponse `graphql:"items_page_by_column_values(limit: 200, board_id: $board_id, columns: [{column_id: $person_column_id, column_values: $logging_user_id}])"`
+type GetBoardItemsQuery struct {
+	Boards []BoardWithItems `graphql:"boards(ids: $board_ids)"`
 }
 
-// GetItems calls the Monday API "items_page_by_column_values" query and returns the logging user's items.
-func (m *MondayAPIClient) GetItems(boardID string, loggingUserID string, personColumnID string, hoursColumnID string) (*ItemResponse, error) {
+// GetBoardItems calls the Monday API "boards" query and returns the logging user's items.
+func (m *MondayAPIClient) GetBoardItems(boardID string, loggingUserID string, personColumnID string, hoursColumnID string) (*BoardWithItems, error) {
 	vars := map[string]any{
-		"board_id":         graphql.ToID(boardID),
-		"logging_user_id":  []string{loggingUserID},
+		"board_ids":        []graphql.ID{graphql.ToID(boardID)},
+		"logging_user_id":  CompareValue("person-" + loggingUserID),
 		"hours_column_id":  []string{hoursColumnID},
-		"person_column_id": personColumnID,
+		"person_column_id": graphql.ToID(personColumnID),
 	}
-	var giq GetItemsQuery
-	err := m.client.Query(context.TODO(), &giq, vars)
+	var gbiq GetBoardItemsQuery
+	err := m.client.Query(context.TODO(), &gbiq, vars)
 	if err != nil {
 		return nil, WrapWithStackF(err,
 			"A problem occurred when contacting monday.com. Exiting.")
 	}
-	return giq.IR, nil
+	return &gbiq.Boards[0], nil
 }
 
 // JSONEncodedString avoids a type mismatch in the GraphQL library when setting a JSON-encoded string property.

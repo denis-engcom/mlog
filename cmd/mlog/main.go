@@ -15,7 +15,7 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/go-errors/errors"
-	ptoml "github.com/pelletier/go-toml/v2"
+	"github.com/pelletier/go-toml/v2"
 )
 
 var (
@@ -92,11 +92,11 @@ func main() {
 				Action:      cliGetBoardByID,
 			},
 			{
-				Name:        "get-items",
-				Aliases:     []string{"gi"},
+				Name:        "get-board-items",
+				Aliases:     []string{"gbi"},
 				ArgsUsage:   "<yyyy-mm>",
 				Description: "Get the logging user's items from the given month's board",
-				Action:      cliGetItems,
+				Action:      cliGetBoardItems,
 			},
 			{
 				Name:        "pulse-link",
@@ -183,7 +183,7 @@ func loadTOML(path string, obj any) error {
 	if err != nil {
 		return err
 	}
-	return ptoml.NewDecoder(file).Decode(obj)
+	return toml.NewDecoder(file).Decode(obj)
 }
 
 func cliSetup(cCtx *cli.Context) error {
@@ -400,10 +400,10 @@ func getBoardByID(mondayAPIClient *MondayAPIClient, boardID string) error {
 			},
 		},
 	}
-	return ptoml.NewEncoder(os.Stdout).Encode(&content)
+	return toml.NewEncoder(os.Stdout).Encode(&content)
 }
 
-func cliGetItems(cCtx *cli.Context) error {
+func cliGetBoardItems(cCtx *cli.Context) error {
 	// TODO Day version of this route
 	// mlog get-items 2023-09-01
 	userConf, boardsConf, err := loadConf()
@@ -424,7 +424,7 @@ func cliGetItems(cCtx *cli.Context) error {
 	}
 
 	logger.Debugw("getItems", "boardID", month.BoardID, "loggingUserID", userConf.LoggingUserID, "personColumnID", boardsConf.PersonColumnID, "hoursColumnID", boardsConf.HoursColumnID)
-	items, err := mondayAPIClient.GetItems(month.BoardID, userConf.LoggingUserID, boardsConf.PersonColumnID, boardsConf.HoursColumnID)
+	boardWithItems, err := mondayAPIClient.GetBoardItems(month.BoardID, userConf.LoggingUserID, boardsConf.PersonColumnID, boardsConf.HoursColumnID)
 	if err != nil {
 		return err
 	}
@@ -432,7 +432,7 @@ func cliGetItems(cCtx *cli.Context) error {
 	//return json.NewEncoder(os.Stdout).Encode(items.Items)
 	table := tabby.New()
 	table.AddHeader("GROUP", "HOURS", "DESCRIPTION", "PULSE ID")
-	for _, item := range items.Items {
+	for _, item := range boardWithItems.Items_Page.Items {
 		table.AddLine(item.Group.Title, item.Column_Values[0].Text, item.Name, item.ID)
 	}
 	table.Print()
