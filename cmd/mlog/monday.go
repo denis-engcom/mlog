@@ -8,6 +8,16 @@ import (
 	"strconv"
 )
 
+// JSONEncodedString avoids a type mismatch in the GraphQL library when setting a JSON-encoded string property.
+type JSONEncodedString string
+
+func (_ JSONEncodedString) GetGraphQLType() string { return "JSON" }
+
+// CompareValue avoids a type mismatch in the GraphQL library when setting a string meant for type CompareValue.
+type CompareValue string
+
+func (_ CompareValue) GetGraphQLType() string { return "CompareValue" }
+
 type MondayAPIClient struct {
 	client         *graphql.Client
 	loggingUserID  string
@@ -62,11 +72,6 @@ func (m *MondayAPIClient) GetBoardByID(boardID string) (*Board, error) {
 	}
 	return &gbq.Boards[0], nil
 }
-
-// CompareValue avoids a type mismatch in the GraphQL library when setting a string meant for type CompareValue.
-type CompareValue string
-
-func (_ CompareValue) GetGraphQLType() string { return "CompareValue" }
 
 //	query {
 //	  boards(ids: 5064273451) {
@@ -123,11 +128,6 @@ func (m *MondayAPIClient) GetBoardItems(boardID string) (*BoardWithItems, error)
 	}
 	return &gbiq.Boards[0], nil
 }
-
-// JSONEncodedString avoids a type mismatch in the GraphQL library when setting a JSON-encoded string property.
-type JSONEncodedString string
-
-func (_ JSONEncodedString) GetGraphQLType() string { return "JSON" }
 
 type CreateLogItemMutate struct {
 	Create_Item struct {
