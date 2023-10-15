@@ -57,7 +57,7 @@ func main() {
 		// Default output is
 		// mlog [global options] command [command options] [arguments...]
 		UsageText:            `mlog command [arguments...]`,
-		Version:              "0.2.0",
+		Version:              "0.2.1",
 		HideHelpCommand:      true,
 		EnableBashCompletion: true,
 		Flags: []cli.Flag{

@@ -146,7 +146,7 @@ func (m *MondayAPIClient) CreateLogItem(boardID int, groupID, itemName, hours st
 	columnValues := fmt.Sprintf(`{"%s":"%s","%s":%s}`, m.personColumnID, m.loggingUserID, m.hoursColumnID, hours)
 
 	vars := map[string]any{
-		"board_id":      boardID,
+		"board_id":      graphql.ToID(boardID),
 		"group_id":      groupID,
 		"item_name":     itemName,
 		"column_values": JSONEncodedString(columnValues),
