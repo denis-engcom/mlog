@@ -1,7 +1,7 @@
 # Run `mlog u` to fetch the latest version of this file.
 
 # For users to know which config they have downloaded
-description = 'Board configuration covering months August 2023 to September 2023 (updated on 2023-10-11)'
+description = 'Board configuration covering months August 2023 to October 2023 (updated on 2023-11-20)'
 
 # These column IDs are needed to populate the "person" and "hours" field
 # They appear to be stable month-to-month
@@ -96,3 +96,40 @@ name = 'Sep 2023 :Completed Work'
 '-29' = 'fri_sep_29'
 # No group for Sept 30th
 #'Group 1' = 'new_group36'
+
+[months.2023-10]
+board_id = '5262708320'
+name = 'Oct 2023 :Completed Work'
+
+[months.2023-10.days]
+'-01' = 'fri_sep_01'
+'-02' = 'sat_sep_02'
+'-03' = 'sun_sep_03'
+'-04' = 'mon_sep_04'
+'-05' = 'tue_sep_05'
+'-06' = 'wed_sep_06'
+'-07' = 'thu_sep_07'
+'-08' = 'fri_sep_08'
+'-09' = 'sat_sep_09'
+'-10' = 'sun_sep_10'
+'-11' = 'mon_sep_11'
+'-12' = 'tue_sep_12'
+'-13' = 'wed_sep_13'
+'-14' = 'thu_sep_14'
+'-15' = 'fri_sep_15'
+'-16' = 'sat_sep_16'
+'-17' = 'sun_sep_17'
+'-18' = 'mon_sep_18'
+'-19' = 'tue_sep_19'
+'-20' = 'wed_sep_20'
+'-21' = 'duplicate_of_fri_sep_22'
+'-22' = 'fri_sep_22'
+'-23' = 'sat_sep_23'
+'-24' = 'sun_sep_24'
+'-25' = 'mon_sep_25'
+'-26' = 'tue_sep_26'
+'-27' = 'wed_sep_27'
+'-28' = 'thu_sep_28'
+'-29' = 'fri_sep_29'
+'-30' = 'new_group'
+'-31' = 'new_group91955'
