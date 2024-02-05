@@ -13,7 +13,6 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/cheynewallace/tabby"
-	"github.com/go-errors/errors"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
@@ -114,22 +113,7 @@ func main() {
 		// Adapt error handling to...
 		// * printing stack traces during debug mode
 		// * using errors.As to get ExitCoder at any level for printing
-		ExitErrHandler: func(cCtx *cli.Context, err error) {
-			var sErr *errors.Error
-			if cCtx.Bool("debug") && errors.As(err, &sErr) {
-				fmt.Fprint(cli.ErrWriter, sErr.ErrorStack())
-			} else if cmErr := CommandMessager(nil); errors.As(err, &cmErr) {
-				fmt.Fprintln(cli.ErrWriter, cmErr.Message())
-			} else if err != nil {
-				fmt.Fprintf(cli.ErrWriter, "%v\n", err)
-			}
-
-			if ecErr := cli.ExitCoder(nil); errors.As(err, &ecErr) {
-				cli.OsExiter(ecErr.ExitCode())
-			} else if err != nil {
-				cli.OsExiter(1)
-			}
-		},
+		ExitErrHandler: customErrorHandler,
 	}
 
 	app.Run(os.Args)
