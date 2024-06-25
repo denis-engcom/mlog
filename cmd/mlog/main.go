@@ -56,7 +56,7 @@ func main() {
 		// Default output is
 		// mlog [global options] command [command options] [arguments...]
 		UsageText:            `mlog command [arguments...]`,
-		Version:              "0.2.1",
+		Version:              "0.2.2",
 		HideHelpCommand:      true,
 		EnableBashCompletion: true,
 		Flags: []cli.Flag{
@@ -455,6 +455,10 @@ func cliCreateOne(cCtx *cli.Context) error {
 	args := cCtx.Args()
 	dayYYYYMMDD, itemName, hours := args.Get(0), args.Get(1), args.Get(2)
 
+	return createOne(mondayAPIClient, boardsConf, dayYYYYMMDD, itemName, hours)
+}
+
+func createOne(mondayAPIClient *MondayAPIClient, boardsConf *BoardsConf, dayYYYYMMDD, itemName, hours string) error {
 	if len(dayYYYYMMDD) != 10 {
 		return WithStackF("day = %s (first arg): provided day is not in format yyyy-mm-dd. Exiting.", dayYYYYMMDD)
 	}
