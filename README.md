@@ -92,6 +92,27 @@ Tue Sep 05  1.5          2
 ➜ mlog create-one 2023-09-05 "Pursued activities to get things done" 2.5
 https://magicboard.monday.com/boards/1234567890/pulses/5678901237
 
+# Output from "hledger register" (timeclock or timedot) can be fed directly to "mlog cm" to produce
+# multiple entries.
+➜ $EDITOR logs.timedot
+2024-02-28
+Debugging production behaviour  .... ....
+Fix for recent missing form data bug  .... .... ..
+Release management  .... .... ....
+
+➜ hledger register -p daily date:2024-02-28 -f logs.timedot
+2024-02-28   Debugging production behaviour                                       2.00          2.00
+             Fix for recent missing form data bug                                 2.50          4.50
+             Release management                                                   3.00          7.50
+
+➜ hledger register -p daily date:2024-02-28 -f logs.timedot | mlog create-many
+line 1: matched row with date: 2024-02-28, Debugging production behaviour, 2.00
+https://magicboard.monday.com/boards/5933594503/pulses/6898383496
+line 2: matched row without date: Fix for recent missing form data bug, 2.50
+https://magicboard.monday.com/boards/5933594503/pulses/6898383546
+line 3: matched row without date: Release management, 3.00
+https://magicboard.monday.com/boards/5933594503/pulses/6898383613
+
 # Quickly open a pulse in your browser for modification
 ➜ open `mlog pulse-link 5678901237`
 ```
@@ -119,17 +140,9 @@ https://magicboard.monday.com/boards/1234567890/pulses/5678901237
 
 ## Future features to implement
 
-Drive pulse creation from config (TOML or CSV)...
-
 ```sh
-# All the information needed for log creation should be captured in the toml
-# validate will use credentials to obtain board information, validate group (day of the month) values,
-# and validate overall config format
-➜ mlog create-all --dry-run april-2023.toml
-
-# Send log entries to the Monday.com board
-# For every log to be created, show information to user, and prompt for confirmation
-➜ mlog create-all april-2023.toml
+# Dry-run option to validate parsing of log events
+➜ mlog create-many --dry-run` 
 ```
 
 ## Important links

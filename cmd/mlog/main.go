@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"cmp"
 	_ "embed"
 	"fmt"
 	"io"
+	"regexp"
+
 	// "log"
 	"net/http"
 	"os"
@@ -56,7 +59,7 @@ func main() {
 		// Default output is
 		// mlog [global options] command [command options] [arguments...]
 		UsageText:            `mlog command [arguments...]`,
-		Version:              "0.2.2",
+		Version:              "0.3.0",
 		HideHelpCommand:      true,
 		EnableBashCompletion: true,
 		Flags: []cli.Flag{
@@ -94,6 +97,13 @@ func main() {
 				ArgsUsage:   "<yyyy-mm-dd> <item-description> <hours>",
 				Description: "Create one log entry with info provided on the command line",
 				Action:      cliCreateOne,
+			},
+			{
+				Name:        "create-many",
+				Aliases:     []string{"cm"},
+				ArgsUsage:   "<stdin>",
+				Description: "Create log entries based on timeclock/timedot fed to hledger register -p daily",
+				Action:      cliCreateMany,
 			},
 			{
 				Name:        "pulse-link",
@@ -491,6 +501,68 @@ func createOne(mondayAPIClient *MondayAPIClient, boardsConf *BoardsConf, dayYYYY
 		return err
 	}
 	fmt.Printf("https://magicboard.monday.com%s\n", res.Create_Item.Relative_Link)
+	return nil
+}
+
+func cliCreateMany(cCtx *cli.Context) error {
+	userConf, boardsConf, err := loadConf()
+	if err != nil {
+		return err
+	}
+
+	mondayAPIClient := NewMondayAPIClient(
+		userConf.APIAccessToken,
+		userConf.LoggingUserID,
+		boardsConf.PersonColumnID,
+		boardsConf.HoursColumnID)
+
+	return createMany(mondayAPIClient, boardsConf)
+}
+
+var (
+	// Example line:
+	// 2006-01-02  My log line  1.50
+	regexRowWithDate = regexp.MustCompile("^([[:digit:]]{4}-[[:digit:]]{2}-[[:digit:]]{2})[[:blank:]]{2,}(.+?)[[:blank:]]{2,}([^[:blank:]h]+)")
+	// Example line:
+	//             My log line  1.50
+	regexRowWithoutDate = regexp.MustCompile("^[[:blank:]]{2,}(.+?)[[:blank:]]{2,}([^[:blank:]h]+)")
+)
+
+func createMany(mondayAPIClient *MondayAPIClient, boardsConf *BoardsConf) error {
+	var currentDayYYYYMMDD string
+	var lineNumber uint
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		lineNumber += 1
+		line := scanner.Text()
+		matches := regexRowWithDate.FindStringSubmatch(line)
+		if len(matches) == 4 {
+			fmt.Printf("line %d: matched row with date: %s, %s, %s\n", lineNumber, matches[1], matches[2], matches[3])
+			currentDayYYYYMMDD = matches[1]
+			err := createOne(mondayAPIClient, boardsConf, currentDayYYYYMMDD, matches[2], matches[3])
+			if err != nil {
+				return WrapWithStack(err, "created one from row with date")
+			}
+			continue
+		}
+		matches = regexRowWithoutDate.FindStringSubmatch(line)
+		if len(matches) == 3 {
+			fmt.Printf("line %d: matched row without date (using %s): %s, %s\n", lineNumber, currentDayYYYYMMDD, matches[1], matches[2])
+			err := createOne(mondayAPIClient, boardsConf, currentDayYYYYMMDD, matches[1], matches[2])
+			if err != nil {
+				return WrapWithStack(err, "created one from row with date")
+			}
+			continue
+		}
+		if line != "" {
+			fmt.Printf("line %d: non-empty line ignored: %s\n", lineNumber, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return WrapWithStack(err, "scanned stdin lines")
+	}
+
 	return nil
 }
 
