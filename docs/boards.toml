@@ -1,7 +1,7 @@
 # Run `mlog u` to fetch the latest version of this file.
 
 # For users to know which config they have downloaded
-description = 'Board configuration covering months August 2023 to February 2024 (updated on 2024-06-24)'
+description = 'Board configuration covering months August 2023 to March 2024 (updated on 2024-06-25)'
 
 # These column IDs are needed to populate the "person" and "hours" field
 # They appear to be stable month-to-month
@@ -280,3 +280,39 @@ name = 'Feb 2024 :Completed Work'
 '-27' = 'tue_feb_27'
 '-28' = 'wed_feb_28'
 '-29' = 'thu_feb_29'
+
+[months.2024-03]
+board_id = '6132068436'
+name = 'Mar 2024 :Completed Work'
+
+[months.2024-03.days]
+'-01' = 'fri_mar_01'
+'-02' = 'sat_mar_02'
+'-03' = 'sun_mar_03'
+'-04' = 'mon_mar_04'
+'-05' = 'tue_mar_05'
+'-06' = 'wed_mar_06'
+'-07' = 'thu_mar_07'
+'-08' = 'fri_mar_08'
+'-09' = 'sat_mar_09'
+'-10' = 'sun_mar_10'
+'-11' = 'mon_mar_11'
+'-12' = 'tue_mar_12'
+'-13' = 'wed_mar_13'
+'-14' = 'thu_mar_14'
+'-15' = 'fri_mar_15'
+'-16' = 'sat_mar_16'
+'-17' = 'sun_mar_17'
+'-18' = 'mon_mar_18'
+'-19' = 'tue_mar_19'
+'-20' = 'wed_mar_20'
+'-21' = 'thu_mar_21'
+'-22' = 'fri_mar_22'
+'-23' = 'sat_mar_23'
+'-24' = 'sun_mar_24'
+'-25' = 'mon_mar_25'
+'-26' = 'tue_mar_26'
+'-27' = 'wed_mar_27'
+'-28' = 'thu_mar_28'
+'-29' = 'fri_mar_29'
+'-30' = 'new_group'
